@@ -1,5 +1,25 @@
 <script setup lang="ts">
+import AllocationDonutChart from "~/components/charts/AllocationDonutChart.vue";
 
+const DonutData = [
+  {
+    color: '#60A5FA',
+    name: 'Blue',
+    value: 50,
+  },
+  {
+    color: '#CBD5E1',
+    name: 'Gray',
+    value: 20,
+  },
+  {
+    color: '#05df72',
+    name: 'Green',
+    value: 30,
+  },
+]
+
+//Mocked data for line chart
 const todayData = Array.from({ length: 24 }, (_, i) => ({
   hour: `${String(i).padStart(2, '0')}:00`, // Format as "HH:00"
   value: Math.floor(Math.random() * 50) + 10, // Random value between 10 and 59
@@ -155,19 +175,14 @@ const cards = kpiCardsData;
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Current Asset Allocation</h2>
           </div>
-          <div class="h-[300px] flex items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded">
-            [Asset Allocation Chart Placeholder - e.g., Donut: Stocks 40%, Venture 30%, Tangible 20%, Cash 10%]
-          </div>
+          <AllocationDonutChart/>
         </div>
 
         <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Sector Allocation</h2>
           </div>
-          <div class="h-[320px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded">
-            <p>[Sector Allocation Chart Placeholder]</p>
-            <p class="text-xs mt-1">(e.g., Tech 30%, Healthcare 20%, Financials 15%)</p>
-          </div>
+          <AllocationDonutChart/>
         </div>
       </div>
 
@@ -176,20 +191,16 @@ const cards = kpiCardsData;
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Geographic Allocation</h2>
           </div>
-          <div class="h-[320px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded">
-            <p>[Geographic Allocation Chart Placeholder]</p>
-            <p class="text-xs mt-1">(e.g., USA 60%, Europe 25%, Asia 10%, Other 5%)</p>
-          </div>
+          <AllocationDonutChart/>
+
         </div>
 
         <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Platform Allocation</h2>
           </div>
-          <div class="h-[300px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded">
-            <p>[Platform Allocation Chart Placeholder]</p>
-            <p class="text-xs mt-1">(e.g., Brokerage A 50%, Brokerage B 30%, Crypto Exchange 20%)</p>
-          </div>
+          <AllocationDonutChart/>
+
         </div>
       </div>
 

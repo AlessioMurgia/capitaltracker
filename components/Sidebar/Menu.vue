@@ -2,7 +2,7 @@
   const items = ref([
     {
       title: "Overview",
-      path: "/",
+      path: "/dashboard",
       icon: "material-symbols:dashboard-outline-rounded"
     },
     {
