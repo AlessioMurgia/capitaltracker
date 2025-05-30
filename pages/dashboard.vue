@@ -1,119 +1,115 @@
 <script setup lang="ts">
+import { ref, onMounted, watch } from 'vue';
 import AllocationDonutChart from "~/components/charts/AllocationDonutChart.vue";
 
-const DonutData = [
-  {
-    color: '#60A5FA',
-    name: 'Blue',
-    value: 50,
-  },
-  {
-    color: '#CBD5E1',
-    name: 'Gray',
-    value: 20,
-  },
-  {
-    color: '#05df72',
-    name: 'Green',
-    value: 30,
-  },
-]
-
-//Mocked data for line chart
-const todayData = Array.from({ length: 24 }, (_, i) => ({
-  hour: `${String(i).padStart(2, '0')}:00`, // Format as "HH:00"
-  value: Math.floor(Math.random() * 50) + 10, // Random value between 10 and 59
-}));
-
-// Month's Data (daily for a 30-day month)
-const monthData = Array.from({ length: 30 }, (_, i) => ({
-  day: i + 1, // Day of the month
-  value: Math.floor(Math.random() * 100) + 50, // Random value between 50 and 149
-}));
-
-// Six Months' Data (monthly)
-const sixMonthNames = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May']; // Example: Last 6 months
-const sixMonthData = sixMonthNames.map(month => ({
-  month: month,
-  value: Math.floor(Math.random() * 150) + 70, // Random value between 70 and 219
-}));
-
-// Year's Data (monthly)
-const yearData = [
-  { month: 'May', value: 40}, { month: 'Jun', value: 50},
-  { month: 'Jul', value: 70}, { month: 'Aug', value: 60},
-  { month: 'Sep', value: 70}, { month: 'Oct', value: 80},
-  { month: 'Nov', value: 100}, { month: 'Dec', value: 90},
-  { month: 'Jan', value: 100 }, { month: 'Feb', value: 120 },
-  { month: 'Mar', value: 180 }, { month: 'Apr', value: 110},
-];
-
-// --- Common Chart Configuration ---
-const commonChartCategories = {
-  value: {
-    name: 'Value',
-    color: '#3b82f6'
-  }
-};
-
-// --- Tab and Chart Definitions for Portfolio Value Over Time ---
-const portfolioValueChartTabs = [
-  {
-    title: "Today",
-    chartData: todayData,
-    chartXFormatter: (index: number, data: any[]) => data[index]?.hour || '',
-    chartXLabel: "Time of Day (Hour)"
-  },
-  {
-    title: "Month",
-    chartData: monthData,
-    chartXFormatter: (index: number, data: any[]) => `Day ${data[index]?.day || ''}`,
-    chartXLabel: "Day of Month"
-  },
-  {
-    title: "SixMonth",
-    chartData: sixMonthData,
-    chartXFormatter: (index: number, data: any[]) => data[index]?.month || '',
-    chartXLabel: "Month"
-  },
-  {
-    title: "Year",
-    chartData: yearData,
-    chartXFormatter: (index: number, data: any[]) => data[index]?.month || '',
-    chartXLabel: "Month"
-  }
-];
-
-// --- Data for KPI Cards ---
-const kpiCardsData = [
-  {
-    id: 'totalValue',
-    title: "Total Portfolio Value",
-    amount: 123456.78,
-    progression: 5.2,
-    description: "Current total value of all assets",
-    icon: "solar:wallet-money-bold-duotone"
-  },
-  {
-    id: 'dayGainLoss',
-    title: "Day's Gain/Loss",
-    progression: 1.12,
-    amount: 543.21,
-    description: "Change since last market close",
-    icon: "solar:graph-up-bold-duotone"
-  },
-  {
-    id: 'totalGainLoss',
-    title: "Total Gain/Loss",
-    progression: 12.5,
-    amount: 10876.54,
-    description: "Overall profit or loss since inception",
-    icon: "solar:chart-line-bold-duotone"
-  }
-];
+// --- Mocked Data for Line Chart & KPIs (Kept as is) ---
+const todayData = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, value: Math.floor(Math.random() * 50) + 10, }));
+const monthData = Array.from({ length: 30 }, (_, i) => ({ day: i + 1, value: Math.floor(Math.random() * 100) + 50, }));
+const sixMonthNames = ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May'];
+const sixMonthData = sixMonthNames.map(month => ({ month: month, value: Math.floor(Math.random() * 150) + 70, }));
+const yearData = [ { month: 'May', value: 40}, { month: 'Jun', value: 50}, { month: 'Jul', value: 70}, { month: 'Aug', value: 60}, { month: 'Sep', value: 70}, { month: 'Oct', value: 80}, { month: 'Nov', value: 100}, { month: 'Dec', value: 90}, { month: 'Jan', value: 100 }, { month: 'Feb', value: 120 }, { month: 'Mar', value: 180 }, { month: 'Apr', value: 110}, ];
+const commonChartCategories = { value: { name: 'Value', color: '#3b82f6' } };
+const portfolioValueChartTabs = [ { title: "Today", chartData: todayData, chartXFormatter: (index: number, data: any[]) => data[index]?.hour || '', chartXLabel: "Time of Day (Hour)" }, { title: "Month", chartData: monthData, chartXFormatter: (index: number, data: any[]) => `Day ${data[index]?.day || ''}`, chartXLabel: "Day of Month" }, { title: "SixMonth", chartData: sixMonthData, chartXFormatter: (index: number, data: any[]) => data[index]?.month || '', chartXLabel: "Month" }, { title: "Year", chartData: yearData, chartXFormatter: (index: number, data: any[]) => data[index]?.month || '', chartXLabel: "Month" } ];
+const kpiCardsData = [ { id: 'totalValue', title: "Total Portfolio Value", amount: 123456.78, progression: 5.2, description: "Current total value of all assets", }, { id: 'dayGainLoss', title: "Day's Gain/Loss", progression: 1.12, amount: 543.21, description: "Change since last market close", }, { id: 'totalGainLoss', title: "Total Gain/Loss", progression: 12.5, amount: 10876.54, description: "Overall profit or loss since inception", } ];
 const cards = kpiCardsData;
+// --- End of Mocked Data ---
 
+const supabase = useSupabaseClient();
+const user = useSupabaseUser();
+
+interface AllocationDataPoint { name: string; value: number; }
+const currentAssetAllocationData = ref<AllocationDataPoint[] | null>(null);
+const sectorAllocationData = ref<AllocationDataPoint[] | null>(null);
+const geographicAllocationData = ref<AllocationDataPoint[] | null>(null);
+const platformAllocationData = ref<AllocationDataPoint[] | null>(null);
+
+const isLoadingAllocations = ref(true);
+const allocationError = ref<string | null>(null);
+
+async function loadAllocationData() {
+  if (!user.value?.id) {
+    allocationError.value = "User not logged in.";
+    isLoadingAllocations.value = false;
+    currentAssetAllocationData.value = []; sectorAllocationData.value = []; geographicAllocationData.value = []; platformAllocationData.value = [];
+    return;
+  }
+
+  isLoadingAllocations.value = true;
+  allocationError.value = null;
+  console.log("Fetching allocation data for user:", user.value.id);
+
+  try {
+    const { data: assets } = await supabase
+        .from('assets')
+        .select('asset_class, asset_type, geography, platform_name, current_total_value, metadata')
+        .eq('user_id', user.value.id);
+
+    console.log("Assets fetched from Supabase:", assets);
+
+
+    if (!assets || assets.length === 0) {
+      console.log("No assets found for user in Supabase.");
+      currentAssetAllocationData.value = []; sectorAllocationData.value = []; geographicAllocationData.value = []; platformAllocationData.value = [];
+      isLoadingAllocations.value = false;
+      return;
+    }
+
+    const createAggregatedData = (keyExtractor: (asset: any) => string | undefined, typeLabel: string) => {
+      const agg: Record<string, number> = {};
+      assets.forEach(asset => {
+        const key = keyExtractor(asset) || 'Uncategorized';
+        agg[key] = (agg[key] || 0) + (asset.current_total_value || 0);
+      });
+      const result = Object.entries(agg).map(([name, value]) => ({ name, value })).filter(item => item.value > 0.001);
+      console.log(`Aggregated ${typeLabel} Data:`, JSON.parse(JSON.stringify(result)));
+      return result;
+    };
+
+    currentAssetAllocationData.value = createAggregatedData(asset => asset.asset_class, "Asset Class");
+
+    sectorAllocationData.value = createAggregatedData(asset =>
+            (asset.asset_type === 'MARKET_SECURITY' && asset.metadata && typeof asset.metadata === 'object' && 'sector' in asset.metadata)
+                ? (asset.metadata as { sector?: string }).sector : undefined,
+        "Sector"
+    );
+    // Further filter for sectors to ensure we only show valid sectors from market securities
+    sectorAllocationData.value = sectorAllocationData.value.filter(s =>
+        assets.some(a => a.asset_type === 'MARKET_SECURITY' && (a.metadata as any)?.sector === s.name && (a.current_total_value || 0) > 0.001) ||
+        (s.name === 'Uncategorized' && assets.some(a => a.asset_type === 'MARKET_SECURITY' && !(a.metadata as any)?.sector && (a.current_total_value || 0) > 0.001)) ||
+        (sectorAllocationData.value?.length === 1 && s.name === 'Uncategorized') // Keep 'Uncategorized' if it's the only sector data point
+    );
+
+
+    geographicAllocationData.value = createAggregatedData(asset => asset.geography, "Geography");
+    platformAllocationData.value = createAggregatedData(asset => asset.platform_name, "Platform");
+
+  } catch (error: any) {
+    console.error("Error in loadAllocationData:", error);
+    allocationError.value = "Failed to load allocation data: " + error.message;
+    currentAssetAllocationData.value = []; sectorAllocationData.value = []; geographicAllocationData.value = []; platformAllocationData.value = [];
+  } finally {
+    isLoadingAllocations.value = false;
+  }
+}
+
+onMounted(() => {
+  definePageMeta({ layout: 'default', middleware: ['auth'] });
+
+  watch(user, (currentUser, prevUser) => {
+    if (currentUser && !prevUser) { // User logged in or became available
+      loadAllocationData();
+    } else if (!currentUser && prevUser) { // User logged out
+      currentAssetAllocationData.value = null;
+      sectorAllocationData.value = null;
+      geographicAllocationData.value = null;
+      platformAllocationData.value = null;
+      isLoadingAllocations.value = true;
+      allocationError.value = "Please log in to view data.";
+    }
+  }, { immediate: true }); // immediate: true will run the watcher handler once on component mount
+});
 </script>
+
 
 <template>
   <div class="grid w-full gap-6 p-4 md:p-6">
@@ -175,14 +171,14 @@ const cards = kpiCardsData;
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Current Asset Allocation</h2>
           </div>
-          <AllocationDonutChart/>
+          <AllocationDonutChart :allocation-data="currentAssetAllocationData" />
         </div>
 
         <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Sector Allocation</h2>
           </div>
-          <AllocationDonutChart/>
+          <AllocationDonutChart :allocation-data="sectorAllocationData" />
         </div>
       </div>
 
@@ -191,7 +187,7 @@ const cards = kpiCardsData;
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Geographic Allocation</h2>
           </div>
-          <AllocationDonutChart/>
+          <AllocationDonutChart :allocation-data="geographicAllocationData" />
 
         </div>
 
@@ -199,7 +195,7 @@ const cards = kpiCardsData;
           <div class="flex items-center justify-between mb-2">
             <h2 class="text-xl font-semibold">Platform Allocation</h2>
           </div>
-          <AllocationDonutChart/>
+          <AllocationDonutChart :allocation-data="platformAllocationData" />
 
         </div>
       </div>
