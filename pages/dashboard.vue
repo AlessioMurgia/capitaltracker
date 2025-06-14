@@ -197,8 +197,6 @@ onMounted(() => {
         <p class="text-muted-foreground">All info about your investments</p>
         <h1 class="text-2xl font-semibold md:text-3xl">Dashboard</h1>
       </div>
-      <div class="bg-neutral-200 h-[36px] w-[120px]">
-      </div>
     </header>
 
     <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

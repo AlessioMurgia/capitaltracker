@@ -131,9 +131,7 @@ const chartOptions = computed(() => {
               // Use a formatter to show dynamic text based on clicks
               formatter: () => {
                 // If a slice has been selected, show its label
-                if (selectedLabel.value) {
-                  return selectedLabel.value;
-                }
+
                 // Otherwise, show the total number of original items
                 return props.allocationData.length;
               },
