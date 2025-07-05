@@ -3,211 +3,400 @@ import { ref, onMounted, watch } from 'vue';
 import AllocationDonutChart from "~/components/charts/AllocationDonutChart.vue";
 import MainLineChart from  "~/components/charts/MainLineChart.vue";
 import AllocationAreaChart from '~/components/charts/AllocationAreaChart.vue';
-
-
-// --- Chart & KPI Data Refs ---
-const commonChartCategories = { value: { name: 'Value', color: '#3b82f6' } };
-
-const portfolioValueChartTabs = ref([
-  { title: "Month", chartData: [], chartXFormatter: (index: number, data: any[]) => new Date(data[index]?.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), chartXLabel: "Date" },
-  { title: "Year", chartData: [], chartXFormatter: (index: number, data: any[]) => new Date(data[index]?.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), chartXLabel: "Month" },
-  { title: "Max", chartData: [], chartXFormatter: (index: number, data: any[]) => new Date(data[index]?.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), chartXLabel: "Month" }
-]);
-
-const kpiCardsData = [
-  { id: 'totalValue', title: "Total Portfolio Value", amount: 123456.78, progression: 5.2, description: "Current total value of all assets", },
-  { id: 'dayGainLoss', title: "Day's Gain/Loss", progression: 1.12, amount: 543.21, description: "Change since last market close", },
-  { id: 'totalGainLoss', title: "Total Gain/Loss", progression: 12.5, amount: 10876.54, description: "Overall profit or loss since inception", }
-];
-const cards = kpiCardsData;
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '~/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
-
-interface AllocationDataPoint { name: string; value: number; }
-const currentAssetAllocationData = ref<AllocationDataPoint[] | null>(null);
-const sectorAllocationData = ref<AllocationDataPoint[] | null>(null);
-const geographicAllocationData = ref<AllocationDataPoint[] | null>(null);
-const platformAllocationData = ref<AllocationDataPoint[] | null>(null);
-const assetAllocationHistoryData = ref<any[]>([]);
-
 const isLoading = ref(true);
 const dataError = ref<string | null>(null);
 
-// --- Data Processing Functions ---
-function aggregateToMonthly(history: {date: string, value: number}[]): {date: string, value: number}[] {
-  if (!history || history.length === 0) return [];
-  const monthlyData: Record<string, {date: string, value: number}> = {};
-  history.forEach(point => {
-    const monthKey = point.date.substring(0, 7);
-    monthlyData[monthKey] = point;
-  });
-  return Object.values(monthlyData);
+// --- Interfaces for our new Data Model ---
+interface Asset {
+  id: string;
+  asset_class: string;
+  name: string;
+  ticker: string | null;
+  isin: string | null;
+  currency: string;
+  metadata: {
+    geography?: string;
+    sector?: string;
+    platform?: string;
+    [key: string]: any;
+  };
 }
 
-function createAllocationHistoryData(assets: any[]): any[] {
-  if (!assets || assets.length === 0) return [];
-  const allValuationPoints: { date: Date; value: number; asset_class: string }[] = [];
-  const assetClasses = new Set<string>();
-  assets.forEach(asset => {
-    const assetClass = asset.asset_class || 'Uncategorized';
-    assetClasses.add(assetClass);
-    if (asset.initial_investment_date && asset.initial_cost_basis_total) allValuationPoints.push({ date: new Date(asset.initial_investment_date), value: asset.initial_cost_basis_total, asset_class: assetClass });
-    if (asset.metadata?.valuation_history) asset.metadata.valuation_history.forEach((h: any) => {
-      const value = h.value ?? h.value_of_my_stake;
-      if (h.date && value !== undefined) allValuationPoints.push({ date: new Date(h.date), value: value, asset_class: assetClass });
-    });
-    if (asset.valuation_as_of_date && asset.current_total_value) allValuationPoints.push({ date: new Date(asset.valuation_as_of_date), value: asset.current_total_value, asset_class: assetClass });
-  });
-  if (allValuationPoints.length === 0) return [];
-  const uniqueDates = [...new Set(allValuationPoints.map(p => p.date.getTime()))].sort((a, b) => a - b);
-  const assetValueMap = new Map<string, number>();
-  const history = uniqueDates.map(dateMs => {
-    const currentDate = new Date(dateMs);
-    const pointsForDate = allValuationPoints.filter(p => p.date.getTime() === dateMs);
-    pointsForDate.forEach(p => assetValueMap.set(p.asset_class, p.value));
-    const dateEntry: Record<string, any> = { time: currentDate.toISOString().split('T')[0] };
-    for (const ac of assetClasses) dateEntry[ac] = assetValueMap.get(ac) || 0;
-    return dateEntry;
-  });
-  for (let i = 1; i < history.length; i++) for (const ac of assetClasses) if (history[i][ac] === 0) history[i][ac] = history[i-1][ac];
-  return history;
+interface Transaction {
+  id: string;
+  asset_id: string;
+  type: 'BUY' | 'SELL';
+  quantity: number;
+  price_per_unit: number;
+  transaction_date: string;
+  assets: Asset;
 }
 
-// MODIFIED line chart data processing function
-function updatePortfolioChartData(assets: any[]) {
-  const allDataPoints: { assetId: string; date: Date; value: number }[] = [];
-  assets.forEach(asset => {
-    if (asset.initial_investment_date && asset.initial_cost_basis_total) allDataPoints.push({ assetId: asset.id, date: new Date(asset.initial_investment_date), value: asset.initial_cost_basis_total });
-    if (asset.metadata?.valuation_history) asset.metadata.valuation_history.forEach((h: any) => {
-      const value = h.value ?? h.value_of_my_stake;
-      if (h.date && value !== undefined) allDataPoints.push({ assetId: asset.id, date: new Date(h.date), value });
-    });
-    if (asset.valuation_as_of_date && asset.current_total_value) allDataPoints.push({ assetId: asset.id, date: new Date(asset.valuation_as_of_date), value: asset.current_total_value });
-  });
+interface Valuation {
+  asset_id: string;
+  date: string;
+  value: number;
+}
 
-  const sortedHistory = allDataPoints
-      .map(p => ({ date: p.date, value: p.value }))
-      .sort((a, b) => a.date.getTime() - b.date.getTime());
+// --- State for Portfolio Selection ---
+const portfoliosList = ref<{ id: string, name: string }[]>([]);
+const selectedPortfolioId = ref<string>('all');
 
-  if (sortedHistory.length === 0) return;
+// --- Chart & KPI Data Refs ---
+interface AllocationDataPoint { name: string; value: number; }
+const currentAssetAllocationData = ref<AllocationDataPoint[]>([]);
+const sectorAllocationData = ref<AllocationDataPoint[]>([]);
+const geographicAllocationData = ref<AllocationDataPoint[]>([]);
+const platformAllocationData = ref<AllocationDataPoint[]>([]);
+const assetAllocationHistoryData = ref<any[]>([]);
 
-  const uniqueDates = [...new Set(sortedHistory.map(p => p.date.getTime()))].sort((a, b) => a - b).map(t => new Date(t));
-  const assetValues: Record<string, number> = {};
-  const totalPortfolioHistory = uniqueDates.map(date => {
-    allDataPoints.forEach(p => {
-      if (p.date.getTime() <= date.getTime()) assetValues[p.assetId] = p.value;
-    });
-    const totalValue = Object.values(assetValues).reduce((sum, val) => sum + (val || 0), 0);
-    return { date: date.toISOString().split('T')[0], value: totalValue };
-  });
+const commonChartCategories = { value: { name: 'Value', color: '#3b82f6' } };
+const portfolioValueChartTabs = ref([
+  { title: "Month", chartData: [] as {date: string, value: number}[], chartXFormatter: (index: number, data: any[]) => new Date(data[index]?.date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), chartXLabel: "Date" },
+  { title: "Year", chartData: [] as {date: string, value: number}[], chartXFormatter: (index: number, data: any[]) => new Date(data[index]?.date).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), chartXLabel: "Month" },
+  { title: "Max", chartData: [] as {date: string, value: number}[], chartXFormatter: (index: number, data: any[]) => new Date(data[index]?.date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), chartXLabel: "Month" }
+]);
 
-  // "Month" data processing (unchanged)
-  const monthData = [];
-  const historyMap = new Map(totalPortfolioHistory.map(p => [p.date, p.value]));
-  const thirtyDaysAgo = new Date(new Date().setDate(new Date().getDate() - 30));
-  let lastKnownValueDaily = [...totalPortfolioHistory].reverse().find(p => new Date(p.date) < thirtyDaysAgo)?.value || totalPortfolioHistory[0]?.value || 0;
-  for (let i = 0; i < 30; i++) {
-    const currentDate = new Date();
-    currentDate.setDate(currentDate.getDate() - (29 - i));
-    const dateString = currentDate.toISOString().split('T')[0];
-    if (historyMap.has(dateString)) {
-      lastKnownValueDaily = historyMap.get(dateString)!;
-    }
-    monthData.push({ date: dateString, value: lastKnownValueDaily });
+const kpiCardsData = ref([
+  { id: 'totalValue', title: "Total Portfolio Value", amount: 0, progression: 0, description: "Current total value of all assets", },
+  { id: 'totalGainLoss', title: "Total Gain/Loss", progression: 0, amount: 0, description: "Overall profit or loss since inception", }
+]);
+
+// --- Data Loading and Processing ---
+
+async function fetchPortfolios() {
+  if (!user.value?.id) return;
+  const { data, error } = await supabase
+      .from('portfolios')
+      .select('id, name')
+      .eq('user_id', user.value.id);
+  if (error) {
+    dataError.value = "Failed to fetch portfolios.";
+  } else {
+    portfoliosList.value = data || [];
   }
-
-  // --- NEW LOGIC FOR FORWARD-FILLING YEAR DATA ---
-  const yearData = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
-    const pointForMonth = [...totalPortfolioHistory].reverse().find(p => new Date(p.date) <= endOfMonth);
-    const valueForMonth = pointForMonth ? pointForMonth.value : 0;
-    yearData.push({ date: endOfMonth.toISOString().split('T')[0], value: valueForMonth });
-  }
-
-  // "Max" data processing (unchanged)
-  const maxData = aggregateToMonthly(totalPortfolioHistory);
-
-  // Update the chart tabs with the new data
-  portfolioValueChartTabs.value[0].chartData = monthData;
-  portfolioValueChartTabs.value[1].chartData = yearData;
-  portfolioValueChartTabs.value[2].chartData = maxData;
 }
 
-
-async function loadData() {
+async function loadAndProcessData() {
   if (!user.value?.id) {
-    dataError.value = "User not logged in."; isLoading.value = false;
-    currentAssetAllocationData.value = []; sectorAllocationData.value = []; geographicAllocationData.value = []; platformAllocationData.value = [];
+    dataError.value = "User not logged in.";
+    isLoading.value = false;
     return;
   }
   isLoading.value = true;
   dataError.value = null;
-  try {
-    const { data: assets, error } = await supabase
-        .from('assets')
-        .select('id, asset_class, asset_type, geography, platform_name, current_total_value, metadata, initial_investment_date, initial_cost_basis_total, valuation_as_of_date')
-        .eq('user_id', user.value.id);
-    if (error) throw error;
-    if (!assets || assets.length === 0) { isLoading.value = false; return; }
 
-    const createAggregatedData = (keyExtractor: (asset: any) => string | undefined) => {
-      const agg: Record<string, number> = {};
-      assets.forEach(asset => {
-        const key = keyExtractor(asset) || 'Uncategorized';
-        agg[key] = (agg[key] || 0) + (asset.current_total_value || 0);
-      });
-      return Object.entries(agg).map(([name, value]) => ({ name, value })).filter(item => item.value > 0.001);
-    };
-    currentAssetAllocationData.value = createAggregatedData(asset => asset.asset_class);
-    sectorAllocationData.value = createAggregatedData(asset => (asset.metadata as any)?.sector);
-    geographicAllocationData.value = createAggregatedData(asset => asset.geography);
-    platformAllocationData.value = createAggregatedData(asset => asset.platform_name);
-    updatePortfolioChartData(assets);
-    assetAllocationHistoryData.value = createAllocationHistoryData(assets);
+  try {
+    let targetPortfolioIds: string[];
+    if (selectedPortfolioId.value === 'all') {
+      targetPortfolioIds = portfoliosList.value.map(p => p.id);
+    } else {
+      targetPortfolioIds = [selectedPortfolioId.value];
+    }
+
+    if (targetPortfolioIds.length === 0 && selectedPortfolioId.value !== 'all') {
+      isLoading.value = false;
+      return;
+    }
+
+    // Reset data before fetching new scope
+    currentAssetAllocationData.value = [];
+    sectorAllocationData.value = [];
+    geographicAllocationData.value = [];
+    platformAllocationData.value = [];
+    assetAllocationHistoryData.value = [];
+    portfolioValueChartTabs.value.forEach(tab => tab.chartData = []);
+    kpiCardsData.value.forEach(card => { card.amount = 0; card.progression = 0; });
+
+    const { data: transactions, error: txError } = await supabase.from('transactions').select(`*, assets!inner(*)`).in('portfolio_id', targetPortfolioIds);
+    if (txError) throw txError;
+    if (!transactions || transactions.length === 0) { isLoading.value = false; return; }
+
+    const assetIds = [...new Set(transactions.map(tx => tx.asset_id))];
+    const { data: valuations, error: valError } = await supabase.from('asset_valuations').select('*').in('asset_id', assetIds);
+    if (valError) throw valError;
+
+    const holdings = calculateHoldings(transactions);
+    const valuationMap = createValuationMap(valuations);
+    const portfolioState = calculatePortfolioState(holdings, valuationMap);
+
+    updateKpiCards(portfolioState);
+    updateDonutCharts(portfolioState);
+    updateHistoricalCharts(transactions, valuations);
+    assetAllocationHistoryData.value = createAllocationHistoryData(transactions, valuations);
+
   } catch (error: any) {
-    console.error("Error loading data:", error);
-    dataError.value = "Failed to load data: " + error.message;
+    console.error("Error loading dashboard data:", error);
+    dataError.value = "Failed to load dashboard: " + error.message;
   } finally {
     isLoading.value = false;
   }
 }
 
+function calculateHoldings(transactions: Transaction[]) {
+  const holdings: Record<string, { quantity: number; cost: number; asset: Asset }> = {};
+  transactions.forEach(tx => {
+    if (!holdings[tx.asset_id]) {
+      holdings[tx.asset_id] = { quantity: 0, cost: 0, asset: tx.assets };
+    }
+    const costOfTx = tx.quantity * tx.price_per_unit;
+    if (tx.type === 'BUY') {
+      holdings[tx.asset_id].quantity += tx.quantity;
+      holdings[tx.asset_id].cost += costOfTx;
+    } else if (tx.type === 'SELL') {
+      holdings[tx.asset_id].quantity -= tx.quantity;
+    }
+  });
+  return holdings;
+}
+
+function createValuationMap(valuations: Valuation[]) {
+  const valuationMap: Record<string, Valuation[]> = {};
+  valuations.forEach(val => {
+    if (!valuationMap[val.asset_id]) valuationMap[val.asset_id] = [];
+    valuationMap[val.asset_id].push(val);
+  });
+  Object.values(valuationMap).forEach(vals => vals.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+  return valuationMap;
+}
+
+function calculatePortfolioState(holdings: ReturnType<typeof calculateHoldings>, valuationMap: ReturnType<typeof createValuationMap>) {
+  return Object.entries(holdings).map(([assetId, holding]) => {
+    const vals = valuationMap[assetId] || [];
+    const latestVal = vals[0]?.value || 0;
+
+    let currentValue = holding.asset.asset_class === 'Cash' ? latestVal : holding.quantity * latestVal;
+
+    return { ...holding, assetId, currentValue };
+  });
+}
+
+function updateKpiCards(portfolioState: ReturnType<typeof calculatePortfolioState>) {
+  const totalValue = portfolioState.reduce((sum, h) => sum + h.currentValue, 0);
+  const totalCost = portfolioState.reduce((sum, h) => sum + h.cost, 0);
+  const totalGainLoss = totalValue - totalCost;
+
+  kpiCardsData.value[0].amount = totalValue;
+  kpiCardsData.value[0].progression = 0;
+
+  kpiCardsData.value[1].amount = totalGainLoss;
+  kpiCardsData.value[1].progression = totalCost !== 0 ? (totalGainLoss / totalCost) * 100 : 0;
+}
+
+function updateDonutCharts(portfolioState: ReturnType<typeof calculatePortfolioState>) {
+  const createAggregatedData = (keyExtractor: (asset: Asset) => string | undefined) => {
+    const agg: Record<string, number> = {};
+    portfolioState.forEach(holding => {
+      if (holding.currentValue > 0) {
+        const key = keyExtractor(holding.asset) || 'Uncategorized';
+        agg[key] = (agg[key] || 0) + holding.currentValue;
+      }
+    });
+    return Object.entries(agg).map(([name, value]) => ({ name, value }));
+  };
+  currentAssetAllocationData.value = createAggregatedData(asset => asset.asset_class).filter(item => item.name !== 'Uncategorized');
+  sectorAllocationData.value = createAggregatedData(asset => asset.metadata?.sector).filter(item => item.name !== 'Uncategorized');
+  geographicAllocationData.value = createAggregatedData(asset => asset.metadata?.geography).filter(item => item.name !== 'Uncategorized');
+  platformAllocationData.value = createAggregatedData(asset => asset.metadata?.platform).filter(item => item.name !== 'Uncategorized');
+}
+
+// --- MODIFIED: Fixed single-point and extends-to-today issues ---
+function updateHistoricalCharts(transactions: Transaction[], valuations: Valuation[]) {
+  const txDates = transactions.map(tx => tx.transaction_date.split('T')[0]);
+  const valDates = valuations.map(v => v.date);
+  const today = new Date();
+  const todayString = today.toISOString().split('T')[0];
+
+  const allDates = [...new Set([...txDates, ...valDates])].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+  if (allDates.length === 0) return;
+
+  const history: { date: string, value: number }[] = [];
+  const assetDetailsMap = new Map(transactions.map(tx => [tx.asset_id, tx.assets]));
+
+  allDates.forEach(date => {
+    let portfolioValueOnDate = 0;
+    const holdingsOnDate: Record<string, number> = {};
+
+    transactions.filter(tx => tx.transaction_date.split('T')[0] <= date)
+        .forEach(tx => holdingsOnDate[tx.asset_id] = (holdingsOnDate[tx.asset_id] || 0) + (tx.type === 'BUY' ? tx.quantity : -tx.quantity));
+
+    Object.entries(holdingsOnDate).forEach(([assetId, quantity]) => {
+      if (quantity > 0) {
+        const asset = assetDetailsMap.get(assetId);
+        const latestValuationForAsset = valuations.filter(v => v.asset_id === assetId && v.date <= date)
+            .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        const assetValue = latestValuationForAsset?.value || 0;
+
+        portfolioValueOnDate += asset?.asset_class === 'Cash' ? assetValue : quantity * assetValue;
+      }
+    });
+    history.push({ date, value: portfolioValueOnDate });
+  });
+
+  // 1. Extend the timeline to today
+  const lastHistoryPoint = history[history.length - 1];
+  if (lastHistoryPoint && lastHistoryPoint.date < todayString) {
+    history.push({ date: todayString, value: lastHistoryPoint.value });
+  }
+
+  // --- 2. Fix the single point issue for Month and Year views ---
+  const processTab = (fullHistory: {date: string, value: number}[], startDate: Date) => {
+    let filteredData = fullHistory.filter(p => new Date(p.date) >= startDate);
+
+    // If no data in the window, find the last known value before the window
+    if (filteredData.length === 0) {
+      const lastPointBefore = fullHistory.slice().reverse().find(p => new Date(p.date) < startDate);
+      if (lastPointBefore) {
+        return [
+          { date: startDate.toISOString().split('T')[0], value: lastPointBefore.value },
+          { date: todayString, value: lastPointBefore.value }
+        ];
+      }
+      return []; // Truly no data
+    }
+
+    // If only one data point in the window, add a point at the start of the window to make a line
+    if (filteredData.length === 1) {
+      const singlePointValue = filteredData[0].value;
+      const lastPointBefore = fullHistory.slice().reverse().find(p => new Date(p.date) < new Date(filteredData[0].date));
+      filteredData.unshift({ date: startDate.toISOString().split('T')[0], value: lastPointBefore?.value || singlePointValue });
+    }
+    return filteredData;
+  }
+
+  const oneMonthAgo = new Date(new Date().setDate(today.getDate() - 30));
+  const oneYearAgo = new Date(new Date().setFullYear(today.getFullYear() - 1));
+
+  portfolioValueChartTabs.value[0].chartData = processTab(history, oneMonthAgo);
+  portfolioValueChartTabs.value[1].chartData = processTab(history, oneYearAgo);
+  portfolioValueChartTabs.value[2].chartData = history;
+}
+
+// --- MODIFIED: Extends allocation history to today ---
+function createAllocationHistoryData(transactions: Transaction[], valuations: Valuation[]) {
+  if (!transactions.length) return [];
+
+  const assetDetailsMap = new Map(transactions.map(tx => [tx.asset_id, tx.assets]));
+  const assetClasses = [...new Set(Array.from(assetDetailsMap.values()).map(a => a.asset_class))];
+  const txDates = transactions.map(tx => tx.transaction_date.split('T')[0]);
+  const valDates = valuations.map(v => v.date);
+  const todayString = new Date().toISOString().split('T')[0];
+
+  const allDates = [...new Set([...txDates, ...valDates])].sort((a,b) => new Date(a).getTime() - new Date(b).getTime());
+  if (allDates.length === 0) return [];
+
+  const history: Record<string, any>[] = [];
+
+  for (const date of allDates) {
+    const compositionOnDate: Record<string, any> = { time: date };
+    assetClasses.forEach(ac => compositionOnDate[ac] = 0);
+
+    const holdingsOnDate: Record<string, number> = {};
+    transactions.filter(tx => tx.transaction_date.split('T')[0] <= date).forEach(tx => {
+      holdingsOnDate[tx.asset_id] = (holdingsOnDate[tx.asset_id] || 0) + (tx.type === 'BUY' ? tx.quantity : -tx.quantity);
+    });
+
+    for (const assetId in holdingsOnDate) {
+      const quantity = holdingsOnDate[assetId];
+      if (quantity > 0) {
+        const asset = assetDetailsMap.get(assetId)!;
+        const latestValuationForAsset = valuations.filter(v => v.asset_id === assetId && v.date <= date)
+            .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        const assetValueOnDate = latestValuationForAsset?.value || 0;
+
+        if (asset.asset_class === 'Cash') {
+          compositionOnDate[asset.asset_class] += quantity;
+        } else {
+          compositionOnDate[asset.asset_class] += quantity * assetValueOnDate;
+        }
+      }
+    }
+    history.push(compositionOnDate);
+  }
+
+  // Forward-fill the data to ensure smooth charts
+  for (let i = 1; i < history.length; i++) {
+    for (const ac of assetClasses) {
+      if (history[i][ac] === undefined || history[i][ac] === 0) {
+        history[i][ac] = history[i-1][ac] || 0;
+      }
+    }
+  }
+
+  // Extend to today
+  const lastHistoryPoint = history[history.length - 1];
+  if (lastHistoryPoint && lastHistoryPoint.time < todayString) {
+    history.push({ ...lastHistoryPoint, time: todayString });
+  }
+
+  return history;
+}
+
 onMounted(() => {
   definePageMeta({ layout: 'default', middleware: ['auth'] });
-  watch(user, (currentUser, prevUser) => {
-    if (currentUser && !prevUser) loadData();
-    else if (!currentUser && prevUser) {
-      currentAssetAllocationData.value = null; sectorAllocationData.value = null;
-      geographicAllocationData.value = null; platformAllocationData.value = null;
-      assetAllocationHistoryData.value = []; isLoading.value = true;
+  watch(user, async (currentUser) => {
+    if (currentUser) {
+      await fetchPortfolios();
+      await loadAndProcessData();
+    } else {
+      isLoading.value = true;
       dataError.value = "Please log in to view data.";
+      portfoliosList.value = [];
+      selectedPortfolioId.value = 'all';
     }
   }, { immediate: true });
+});
+
+watch(selectedPortfolioId, () => {
+  if (user.value) {
+    loadAndProcessData();
+  }
 });
 </script>
 
 <template>
-  <div class="grid w-full gap-6 p-4 md:p-6">
-    <header class="flex items-start justify-between">
+  <div v-if="isLoading" class="flex items-center justify-center h-screen"><p>Loading Dashboard...</p></div>
+  <div v-else-if="dataError" class="flex items-center justify-center h-screen text-red-500"><p>{{ dataError }}</p></div>
+  <div v-else class="grid w-full gap-6 p-4 md:p-6">
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div class="grow">
         <p class="text-muted-foreground">All info about your investments</p>
         <h1 class="text-2xl font-semibold md:text-3xl">Dashboard</h1>
       </div>
+      <div>
+        <Select v-model="selectedPortfolioId">
+          <SelectTrigger>
+            <SelectValue placeholder="Select a portfolio" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>Portfolios</SelectLabel>
+              <SelectItem value="all">All Portfolios</SelectItem>
+              <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">
+                {{ portfolio.name }}
+              </SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
     </header>
 
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <div v-for="card in cards" :key="card.id || card.title" class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div v-for="card in kpiCardsData" :key="card.id" class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
         <div class="flex items-center justify-between mb-1">
           <h3 class="text-sm font-medium text-muted-foreground">{{ card.title }}</h3>
         </div>
         <p class="text-2xl font-bold">
-          {{ typeof card.amount === 'number' ? card.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : card.amount }}
-          <span v-if="card.progression !== undefined" :class="card.progression >= 0 ? 'text-green-600' : 'text-red-600'" class="text-xs font-normal ml-1">
-            {{ card.progression >= 0 ? '+' : '' }}{{ card.progression }}%
+          €{{ card.amount.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+          <span v-if="card.id === 'totalGainLoss' && card.progression !== undefined" :class="card.progression >= 0 ? 'text-green-600' : 'text-red-600'" class="text-xs font-normal ml-1">
+            {{ card.progression >= 0 ? '+' : '' }}{{ card.progression.toFixed(2) }}%
           </span>
         </p>
         <p class="text-xs text-muted-foreground mt-1">{{ card.description }}</p>
@@ -215,34 +404,16 @@ onMounted(() => {
     </section>
 
     <main class="grid grid-cols-1 gap-6">
-
       <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
         <Tabs default-value="Month" class="w-full">
           <TabsList>
-            <TabsTrigger v-for="(item, index) in portfolioValueChartTabs" :key="index" :value="item.title">
-              {{ item.title }}
-            </TabsTrigger>
+            <TabsTrigger v-for="(item, index) in portfolioValueChartTabs" :key="index" :value="item.title">{{ item.title }}</TabsTrigger>
           </TabsList>
-          <TabsContent
-              v-for="item in portfolioValueChartTabs"
-              :key="item.title"
-              :value="item.title"
-              class="mt-4" >
+          <TabsContent v-for="item in portfolioValueChartTabs" :key="item.title" :value="item.title" class="mt-4">
             <ClientOnly>
-              <MainLineChart
-                  :chartTitle="`Portfolio Value: ${item.title}`"
-                  :chartData="item.chartData"
-                  :chartCategories="commonChartCategories"
-                  :chartXFormatter="item.chartXFormatter"
-                  :chartXLabel="item.chartXLabel"
-                  :chartYLabel="'Portfolio Value ($)'"
-                  :chartHeight="350"
-              />
-              <template #fallback>
-                <div class="flex items-center justify-center h-[350px]">
-                  <p>Loading chart...</p>
-                </div>
-              </template>
+              <MainLineChart v-if="item.chartData.length > 0" :chartTitle="`Portfolio Value: ${item.title}`" :chartData="item.chartData" :chartCategories="commonChartCategories" :chartXLabel="item.chartXLabel" :chartYLabel="'Portfolio Value (€)'" :chartHeight="350" />
+              <div v-else class="flex items-center justify-center h-[350px]"><p>No historical data for this period.</p></div>
+              <template #fallback><div class="flex items-center justify-center h-[350px]"><p>Loading chart...</p></div></template>
             </ClientOnly>
           </TabsContent>
         </Tabs>
@@ -250,97 +421,61 @@ onMounted(() => {
 
       <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="text-xl font-semibold">Current Asset Allocation</h2>
-          </div>
+          <h2 class="text-xl font-semibold mb-2">Current Asset Allocation</h2>
           <ClientOnly>
-            <AllocationDonutChart v-if="currentAssetAllocationData" :allocation-data="currentAssetAllocationData" />
-            <template #fallback>
-              <div class="flex items-center justify-center min-h-[350px]">
-                <p>Loading chart...</p>
-              </div>
-            </template>
+            <AllocationDonutChart v-if="currentAssetAllocationData.length > 0" :allocation-data="currentAssetAllocationData" />
+            <div v-else class="flex items-center justify-center min-h-[350px]"><p>No allocation data available.</p></div>
+            <template #fallback><div class="flex items-center justify-center min-h-[350px]"><p>Loading chart...</p></div></template>
           </ClientOnly>
         </div>
         <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="text-xl font-semibold">Sector Allocation</h2>
-          </div>
+          <h2 class="text-xl font-semibold mb-2">Sector Allocation</h2>
           <ClientOnly>
-            <AllocationDonutChart v-if="sectorAllocationData" :allocation-data="sectorAllocationData" />
-            <template #fallback>
-              <div class="flex items-center justify-center min-h-[350px]">
-                <p>Loading chart...</p>
-              </div>
-            </template>
+            <AllocationDonutChart v-if="sectorAllocationData.length > 0" :allocation-data="sectorAllocationData" />
+            <div v-else class="flex items-center justify-center min-h-[350px]"><p>No sector data available.</p></div>
+            <template #fallback><div class="flex items-center justify-center min-h-[350px]"><p>Loading chart...</p></div></template>
           </ClientOnly>
         </div>
       </div>
 
       <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="text-xl font-semibold">Geographic Allocation</h2>
-          </div>
+          <h2 class="text-xl font-semibold mb-2">Geographic Allocation</h2>
           <ClientOnly>
-            <AllocationDonutChart v-if="geographicAllocationData" :allocation-data="geographicAllocationData" />
-            <template #fallback>
-              <div class="flex items-center justify-center min-h-[350px]">
-                <p>Loading chart...</p>
-              </div>
-            </template>
+            <AllocationDonutChart v-if="geographicAllocationData.length > 0" :allocation-data="geographicAllocationData" />
+            <div v-else class="flex items-center justify-center min-h-[350px]"><p>No geographic data available.</p></div>
+            <template #fallback><div class="flex items-center justify-center min-h-[350px]"><p>Loading chart...</p></div></template>
           </ClientOnly>
         </div>
         <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="text-xl font-semibold">Platform Allocation</h2>
-          </div>
+          <h2 class="text-xl font-semibold mb-2">Platform Allocation</h2>
           <ClientOnly>
-            <AllocationDonutChart v-if="platformAllocationData" :allocation-data="platformAllocationData" />
-            <template #fallback>
-              <div class="flex items-center justify-center min-h-[350px]">
-                <p>Loading chart...</p>
-              </div>
-            </template>
+            <AllocationDonutChart v-if="platformAllocationData.length > 0" :allocation-data="platformAllocationData" />
+            <div v-else class="flex items-center justify-center min-h-[350px]"><p>No platform data available.</p></div>
+            <template #fallback><div class="flex items-center justify-center min-h-[350px]"><p>Loading chart...</p></div></template>
           </ClientOnly>
         </div>
       </div>
 
       <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xl font-semibold">Asset Allocation Over Time</h2>
-        </div>
+        <h2 class="text-xl font-semibold mb-2">Asset Allocation Over Time</h2>
         <ClientOnly>
-          <AllocationAreaChart :chart-data="assetAllocationHistoryData" />
-          <template #fallback>
-            <div class="h-[300px] flex items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded">
-              <p>Loading chart...</p>
-            </div>
-          </template>
+          <AllocationAreaChart v-if="assetAllocationHistoryData.length > 0" :chart-data="assetAllocationHistoryData" />
+          <div v-else class="h-[300px] flex items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded"><p>Not enough historical data to show trend.</p></div>
+          <template #fallback><div class="h-[300px] flex items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded"><p>Loading chart...</p></div></template>
         </ClientOnly>
       </div>
     </main>
 
     <footer class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xl font-semibold">Recent Transactions</h2>
-          <a href="/transactions" class="text-sm text-blue-500 hover:underline">View All</a>
-        </div>
-        <div class="h-[250px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded">
-          <p>[Recent Transactions Placeholder]</p>
-          <p class="text-xs mt-1">(e.g., Bought 10 AAPL, Sold 5 ETH)</p>
-        </div>
+        <h2 class="text-xl font-semibold mb-2">Recent Transactions</h2>
+        <a href="/transactions" class="text-sm text-blue-500 hover:underline">View All</a>
+        <div class="h-[250px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded"><p>[Recent Transactions Placeholder]</p></div>
       </div>
       <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xl font-semibold">Next Dividends/Payouts</h2>
-        </div>
-        <div class="h-[250px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded">
-          <p>[Next Dividends/Payouts Placeholder]</p>
-          <p class="text-xs mt-1">(e.g., MSFT Dividend - May 30, Est. $25.00)</p>
-          <p class="text-xs mt-1">(e.g., Rental Income - June 1, Est. $1200.00)</p>
-        </div>
+        <h2 class="text-xl font-semibold mb-2">Next Dividends/Payouts</h2>
+        <div class="h-[250px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded"><p>[Next Dividends/Payouts Placeholder]</p></div>
       </div>
     </footer>
   </div>

@@ -1,25 +1,33 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import type { PropType } from 'vue';
 import VueApexCharts from 'vue3-apexcharts';
 
-// --- Props (Unchanged) ---
+// --- Props ---
 const props = defineProps({
   chartTitle: { type: String, required: true },
-  chartData: { type: Array as PropType<any[]>, required: true },
+  chartData: { type: Array as PropType<{ date: string; value: number }[]>, required: true },
   chartCategories: { type: Object as PropType<Record<string, { name: string; color: string }>>, required: true },
   chartHeight: { type: Number, default: 300 },
-  chartXFormatter: { type: Function as PropType<(index: number, data: any[]) => string>, required: true },
   chartXLabel: { type: String, required: true },
-  chartYLabel: { type: String, default: 'Amount ($)' },
+  chartYLabel: { type: String, default: 'Amount (€)' },
 });
 
 // --- ApexCharts Configuration ---
 const chartSeries = computed(() => {
-  if (!props.chartData || !props.chartCategories) return [];
-  return Object.keys(props.chartCategories).map(key => ({
-    name: props.chartCategories[key].name,
-    data: props.chartData.map(dataPoint => dataPoint[key] ?? 0),
-  }));
+  if (!props.chartData || !props.chartCategories || props.chartData.length === 0) {
+    return [];
+  }
+
+  const seriesData = props.chartData.map(point => {
+    // Convert date string to a timestamp for the datetime axis
+    return [new Date(point.date).getTime(), point.value];
+  });
+
+  return [{
+    name: props.chartCategories.value.name, // Assumes 'value' key from dashboard
+    data: seriesData
+  }];
 });
 
 const chartOptions = computed(() => {
@@ -33,33 +41,29 @@ const chartOptions = computed(() => {
     colors: Object.values(props.chartCategories).map(cat => cat.color),
     dataLabels: { enabled: false },
     stroke: { curve: 'smooth', width: 2 },
-    // --- NEW: Add markers to make every data point visible and hoverable ---
     markers: {
-      size: 0, // Hidden by default
+      size: 0,
       strokeWidth: 0,
-      hover: {
-        size: 5, // A dot appears when you hover near a data point
-      }
+      hover: { size: 5 },
     },
     tooltip: {
       x: {
-        formatter: (val: number, { dataPointIndex }: { dataPointIndex: number }) => {
-          return props.chartXFormatter(dataPointIndex, props.chartData);
-        },
+        format: 'dd MMM yyyy', // Format the date in the tooltip
       },
       y: {
-        formatter: (val: number) => `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        formatter: (val: number) => `€${val.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       },
     },
     xaxis: {
-      type: 'category',
-      categories: props.chartData.map((_, index) => props.chartXFormatter(index, props.chartData)),
+      type: 'datetime', // *** The key change: Use a datetime axis ***
       title: {
         text: props.chartXLabel,
         style: { color: '#6b7280', fontSize: '12px', fontWeight: 400 },
       },
-      tooltip: { enabled: false },
-      // Make hover behavior snap to the closest data point
+      labels: {
+        datetimeUTC: false, // Display dates in the user's local timezone
+        format: undefined, // Let ApexCharts decide the best format (e.g., 'MMM' for year view, 'dd MMM' for month view)
+      },
       axisTicks: { show: true },
       axisBorder: { show: true },
     },
@@ -70,9 +74,9 @@ const chartOptions = computed(() => {
       },
       labels: {
         formatter: (val: number) => {
-          if (Math.abs(val) >= 1e6) return `$${(val / 1e6).toFixed(1)}M`;
-          if (Math.abs(val) >= 1e3) return `$${(val / 1e3).toFixed(0)}k`;
-          return `$${val.toFixed(0)}`;
+          if (Math.abs(val) >= 1e6) return `€${(val / 1e6).toFixed(1)}M`;
+          if (Math.abs(val) >= 1e3) return `€${(val / 1e3).toFixed(0)}k`;
+          return `€${val.toFixed(0)}`;
         },
       },
     },
@@ -90,10 +94,15 @@ const chartOptions = computed(() => {
     <p class="text-lg font-semibold text-gray-700 mb-2">{{ chartTitle }}</p>
     <ClientOnly>
       <VueApexCharts
+          v-if="chartSeries.length > 0 && chartSeries[0].data.length > 0"
+          type="area"
           :options="chartOptions"
           :series="chartSeries"
           :height="chartHeight"
       />
+      <div v-else class="flex items-center justify-center text-muted-foreground" :style="{ height: `${chartHeight}px` }">
+        <p>No data available for this period.</p>
+      </div>
       <template #fallback>
         <div class="flex items-center justify-center" :style="{ height: `${chartHeight}px` }">
           <p>Loading chart...</p>

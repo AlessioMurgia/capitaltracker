@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { computed } from 'vue';
+import type { PropType } from 'vue';
 import VueApexCharts from 'vue3-apexcharts';
 
 // --- Interfaces and Props ---
@@ -17,16 +18,11 @@ const props = defineProps({
 
 // --- Dynamic Categories and Colors ---
 
-// A predefined map of colors for known asset classes
-const PREDEFINED_COLORS: Record<string, string> = {
-  "CASH_AND_EQUIVALENTS": "#34d399",
-  "DIGITAL_ASSETS": "#fb923c",
-  "EQUITY_PRIVATE": "#60a5fa",
-  "EQUITY_PUBLIC": "#f87171",
-  "REAL_ASSETS_TANGIBLE": "#818cf8",
-  "FIXED_INCOME": "#c084fc",
-  // Add more as needed
-};
+// A more extensive, professional color palette to avoid random colors.
+const PROFESSIONAL_PALETTE: string[] = [
+  '#3b82f6', '#10b981', '#f97316', '#8b5cf6', '#ec4899',
+  '#ef4444', '#f59e0b', '#14b8a6', '#6366f1', '#d946ef'
+];
 
 // Dynamically generate categories and colors from the data received
 const categories = computed(() => {
@@ -41,7 +37,7 @@ const categories = computed(() => {
   categoryKeys.forEach((key, index) => {
     result[key] = {
       name: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // Format name for display
-      color: PREDEFINED_COLORS[key] || `#${Math.floor(Math.random()*16777215).toString(16)}`, // Use predefined color or a random fallback
+      color: PROFESSIONAL_PALETTE[index % PROFESSIONAL_PALETTE.length], // Cycle through the palette
     };
   });
   return result;
@@ -50,7 +46,6 @@ const categories = computed(() => {
 
 // --- ApexCharts Configuration ---
 
-// 1. Transform the prop data into the format ApexCharts expects for its `series`
 const chartSeries = computed(() => {
   const categoryKeys = Object.keys(categories.value);
   if (categoryKeys.length === 0) {
@@ -60,15 +55,18 @@ const chartSeries = computed(() => {
   return categoryKeys.map(key => {
     return {
       name: categories.value[key].name,
-      data: props.chartData.map(dataPoint => [
-        new Date(dataPoint.time).getTime(),
-        dataPoint[key],
-      ]),
+      data: props.chartData.map(dataPoint => {
+        const value = dataPoint[key] as number;
+        return [
+          new Date(dataPoint.time).getTime(),
+          // Ensure value is a valid number, default to 0 if not
+          typeof value === 'number' && !isNaN(value) ? value : 0
+        ];
+      }),
     };
   });
 });
 
-// 2. Define all the configuration options for the chart
 const chartOptions = computed(() => {
   return {
     chart: {
@@ -89,14 +87,17 @@ const chartOptions = computed(() => {
     yaxis: {
       labels: {
         formatter: (value: number) => {
-          if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(1)}M`;
-          if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(0)}k`;
-          return `$${value}`;
+          if (Math.abs(value) >= 1e6) return `€${(value / 1e6).toFixed(1)}M`;
+          if (Math.abs(value) >= 1e3) return `€${(value / 1e3).toFixed(0)}k`;
+          return `€${value.toFixed(0)}`;
         }
       }
     },
     tooltip: {
       x: { format: 'dd MMM yyyy' },
+      y: {
+        formatter: (val: number) => `€${val.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      },
     },
     grid: { borderColor: '#f1f1f1' }
   };
@@ -114,10 +115,9 @@ const chartOptions = computed(() => {
           :options="chartOptions"
           :series="chartSeries"
       />
-      <div v-else class="flex items-center justify-center min-h-[300px]">
-        <p>No historical data available to display the chart.</p>
+      <div v-else class="flex items-center justify-center min-h-[300px] text-muted-foreground">
+        <p>No historical allocation data available.</p>
       </div>
-
       <template #fallback>
         <div class="flex items-center justify-center min-h-[300px]">
           <p>Loading chart...</p>
