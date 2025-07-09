@@ -6,6 +6,11 @@
       icon: "material-symbols:dashboard-outline-rounded"
     },
     {
+      title: "Portfolios",
+      path: "/portfolios",
+      icon: "material-symbols:account-balance-wallet-outline"
+    },
+    {
       title: "Assets",
       path: "/assets",
       icon: "carbon:financial-assets"
@@ -14,6 +19,11 @@
       title: "Transactions",
       path: "/transactions",
       icon: "hugeicons:transaction"
+    },
+    {
+      title: "Valuations",
+      path: "/valuations",
+      icon: "carbon:chart-evaluation"
     },
     {
       title: "Account",

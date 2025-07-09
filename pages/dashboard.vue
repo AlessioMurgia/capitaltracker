@@ -5,6 +5,7 @@ import MainLineChart from  "~/components/charts/MainLineChart.vue";
 import AllocationAreaChart from '~/components/charts/AllocationAreaChart.vue';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
@@ -55,6 +56,7 @@ const sectorAllocationData = ref<AllocationDataPoint[]>([]);
 const geographicAllocationData = ref<AllocationDataPoint[]>([]);
 const platformAllocationData = ref<AllocationDataPoint[]>([]);
 const assetAllocationHistoryData = ref<any[]>([]);
+const recentTransactions = ref<Transaction[]>([]); // New ref for recent transactions
 
 const commonChartCategories = { value: { name: 'Value', color: '#3b82f6' } };
 const portfolioValueChartTabs = ref([
@@ -105,31 +107,34 @@ async function loadAndProcessData() {
       return;
     }
 
-    // Reset data before fetching new scope
     currentAssetAllocationData.value = [];
     sectorAllocationData.value = [];
     geographicAllocationData.value = [];
     platformAllocationData.value = [];
     assetAllocationHistoryData.value = [];
+    recentTransactions.value = []; // Reset recent transactions
     portfolioValueChartTabs.value.forEach(tab => tab.chartData = []);
     kpiCardsData.value.forEach(card => { card.amount = 0; card.progression = 0; });
 
-    const { data: transactions, error: txError } = await supabase.from('transactions').select(`*, assets!inner(*)`).in('portfolio_id', targetPortfolioIds);
+    const { data: transactions, error: txError } = await supabase.from('transactions').select(`*, assets!inner(*)`).in('portfolio_id', targetPortfolioIds).order('transaction_date', { ascending: false });
     if (txError) throw txError;
     if (!transactions || transactions.length === 0) { isLoading.value = false; return; }
+
+    // --- NEW: Populate recent transactions ---
+    recentTransactions.value = transactions.slice(0, 5);
 
     const assetIds = [...new Set(transactions.map(tx => tx.asset_id))];
     const { data: valuations, error: valError } = await supabase.from('asset_valuations').select('*').in('asset_id', assetIds);
     if (valError) throw valError;
 
-    const holdings = calculateHoldings(transactions);
-    const valuationMap = createValuationMap(valuations);
+    const { holdings, totalRealizedGainLoss, totalCapitalInvested } = calculateHoldings(transactions);
+    const valuationMap = createValuationMap(valuations || []);
     const portfolioState = calculatePortfolioState(holdings, valuationMap);
 
-    updateKpiCards(portfolioState);
+    updateKpiCards(portfolioState, totalRealizedGainLoss, totalCapitalInvested);
     updateDonutCharts(portfolioState);
-    updateHistoricalCharts(transactions, valuations);
-    assetAllocationHistoryData.value = createAllocationHistoryData(transactions, valuations);
+    updateHistoricalCharts(transactions, valuations || []);
+    assetAllocationHistoryData.value = createAllocationHistoryData(transactions, valuations || []);
 
   } catch (error: any) {
     console.error("Error loading dashboard data:", error);
@@ -140,21 +145,44 @@ async function loadAndProcessData() {
 }
 
 function calculateHoldings(transactions: Transaction[]) {
-  const holdings: Record<string, { quantity: number; cost: number; asset: Asset }> = {};
-  transactions.forEach(tx => {
+  const holdings: Record<string, { quantity: number; costBasis: number; asset: Asset }> = {};
+  let totalRealizedGainLoss = 0;
+  let totalCapitalInvested = 0;
+
+  const sortedTransactions = transactions.sort((a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
+
+  for (const tx of sortedTransactions) {
     if (!holdings[tx.asset_id]) {
-      holdings[tx.asset_id] = { quantity: 0, cost: 0, asset: tx.assets };
+      holdings[tx.asset_id] = { quantity: 0, costBasis: 0, asset: tx.assets };
     }
-    const costOfTx = tx.quantity * tx.price_per_unit;
+
     if (tx.type === 'BUY') {
+      const costOfTx = tx.quantity * tx.price_per_unit;
       holdings[tx.asset_id].quantity += tx.quantity;
-      holdings[tx.asset_id].cost += costOfTx;
+      holdings[tx.asset_id].costBasis += costOfTx;
+      if (tx.assets.asset_class !== 'Cash') {
+        totalCapitalInvested += costOfTx;
+      }
     } else if (tx.type === 'SELL') {
-      holdings[tx.asset_id].quantity -= tx.quantity;
+      const holdingBeforeSale = holdings[tx.asset_id];
+      if (holdingBeforeSale.quantity === 0) continue;
+
+      const averageCostPerUnit = holdingBeforeSale.costBasis / holdingBeforeSale.quantity;
+      const costOfSoldShares = tx.quantity * averageCostPerUnit;
+      const proceeds = tx.quantity * tx.price_per_unit;
+
+      if (tx.assets.asset_class !== 'Cash') {
+        totalRealizedGainLoss += proceeds - costOfSoldShares;
+        totalCapitalInvested -= costOfSoldShares;
+      }
+
+      holdingBeforeSale.quantity -= tx.quantity;
+      holdingBeforeSale.costBasis -= costOfSoldShares;
     }
-  });
-  return holdings;
+  }
+  return { holdings, totalRealizedGainLoss, totalCapitalInvested };
 }
+
 
 function createValuationMap(valuations: Valuation[]) {
   const valuationMap: Record<string, Valuation[]> = {};
@@ -166,28 +194,31 @@ function createValuationMap(valuations: Valuation[]) {
   return valuationMap;
 }
 
-function calculatePortfolioState(holdings: ReturnType<typeof calculateHoldings>, valuationMap: ReturnType<typeof createValuationMap>) {
+function calculatePortfolioState(holdings: Record<string, { quantity: number; costBasis: number; asset: Asset }>, valuationMap: ReturnType<typeof createValuationMap>) {
   return Object.entries(holdings).map(([assetId, holding]) => {
     const vals = valuationMap[assetId] || [];
-    const latestVal = vals[0]?.value || 0;
+    const latestValFromDb = vals[0]?.value || 0;
 
-    let currentValue = holding.asset.asset_class === 'Cash' ? latestVal : holding.quantity * latestVal;
+    const latestPrice = holding.asset.asset_class === 'Cash' ? 1 : latestValFromDb;
+    const currentValue = holding.quantity * latestPrice;
+    const unrealizedGainLoss = currentValue - holding.costBasis;
 
-    return { ...holding, assetId, currentValue };
+    return { ...holding, assetId, currentValue, unrealizedGainLoss };
   });
 }
 
-function updateKpiCards(portfolioState: ReturnType<typeof calculatePortfolioState>) {
+function updateKpiCards(portfolioState: ReturnType<typeof calculatePortfolioState>, totalRealizedGainLoss: number, totalCapitalInvested: number) {
   const totalValue = portfolioState.reduce((sum, h) => sum + h.currentValue, 0);
-  const totalCost = portfolioState.reduce((sum, h) => sum + h.cost, 0);
-  const totalGainLoss = totalValue - totalCost;
+  const totalUnrealizedGainLoss = portfolioState.reduce((sum, h) => sum + h.unrealizedGainLoss, 0);
+  const totalGainLoss = totalUnrealizedGainLoss + totalRealizedGainLoss;
 
   kpiCardsData.value[0].amount = totalValue;
   kpiCardsData.value[0].progression = 0;
 
   kpiCardsData.value[1].amount = totalGainLoss;
-  kpiCardsData.value[1].progression = totalCost !== 0 ? (totalGainLoss / totalCost) * 100 : 0;
+  kpiCardsData.value[1].progression = totalCapitalInvested !== 0 ? (totalGainLoss / totalCapitalInvested) * 100 : 0;
 }
+
 
 function updateDonutCharts(portfolioState: ReturnType<typeof calculatePortfolioState>) {
   const createAggregatedData = (keyExtractor: (asset: Asset) => string | undefined) => {
@@ -206,7 +237,6 @@ function updateDonutCharts(portfolioState: ReturnType<typeof calculatePortfolioS
   platformAllocationData.value = createAggregatedData(asset => asset.metadata?.platform).filter(item => item.name !== 'Uncategorized');
 }
 
-// --- MODIFIED: Fixed single-point and extends-to-today issues ---
 function updateHistoricalCharts(transactions: Transaction[], valuations: Valuation[]) {
   const txDates = transactions.map(tx => tx.transaction_date.split('T')[0]);
   const valDates = valuations.map(v => v.date);
@@ -232,25 +262,22 @@ function updateHistoricalCharts(transactions: Transaction[], valuations: Valuati
         const asset = assetDetailsMap.get(assetId);
         const latestValuationForAsset = valuations.filter(v => v.asset_id === assetId && v.date <= date)
             .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        const assetValue = latestValuationForAsset?.value || 0;
 
-        portfolioValueOnDate += asset?.asset_class === 'Cash' ? assetValue : quantity * assetValue;
+        const priceOnDate = asset?.asset_class === 'Cash' ? 1 : latestValuationForAsset?.value || 0;
+
+        portfolioValueOnDate += quantity * priceOnDate;
       }
     });
     history.push({ date, value: portfolioValueOnDate });
   });
 
-  // 1. Extend the timeline to today
   const lastHistoryPoint = history[history.length - 1];
   if (lastHistoryPoint && lastHistoryPoint.date < todayString) {
     history.push({ date: todayString, value: lastHistoryPoint.value });
   }
 
-  // --- 2. Fix the single point issue for Month and Year views ---
   const processTab = (fullHistory: {date: string, value: number}[], startDate: Date) => {
     let filteredData = fullHistory.filter(p => new Date(p.date) >= startDate);
-
-    // If no data in the window, find the last known value before the window
     if (filteredData.length === 0) {
       const lastPointBefore = fullHistory.slice().reverse().find(p => new Date(p.date) < startDate);
       if (lastPointBefore) {
@@ -259,14 +286,12 @@ function updateHistoricalCharts(transactions: Transaction[], valuations: Valuati
           { date: todayString, value: lastPointBefore.value }
         ];
       }
-      return []; // Truly no data
+      return [];
     }
-
-    // If only one data point in the window, add a point at the start of the window to make a line
     if (filteredData.length === 1) {
       const singlePointValue = filteredData[0].value;
       const lastPointBefore = fullHistory.slice().reverse().find(p => new Date(p.date) < new Date(filteredData[0].date));
-      filteredData.unshift({ date: startDate.toISOString().split('T')[0], value: lastPointBefore?.value || singlePointValue });
+      filteredData.unshift({ date: startDate.toISOString().split('T')[0], value: lastPointBefore?.value ?? singlePointValue });
     }
     return filteredData;
   }
@@ -279,16 +304,13 @@ function updateHistoricalCharts(transactions: Transaction[], valuations: Valuati
   portfolioValueChartTabs.value[2].chartData = history;
 }
 
-// --- MODIFIED: Extends allocation history to today ---
 function createAllocationHistoryData(transactions: Transaction[], valuations: Valuation[]) {
   if (!transactions.length) return [];
-
   const assetDetailsMap = new Map(transactions.map(tx => [tx.asset_id, tx.assets]));
   const assetClasses = [...new Set(Array.from(assetDetailsMap.values()).map(a => a.asset_class))];
   const txDates = transactions.map(tx => tx.transaction_date.split('T')[0]);
   const valDates = valuations.map(v => v.date);
   const todayString = new Date().toISOString().split('T')[0];
-
   const allDates = [...new Set([...txDates, ...valDates])].sort((a,b) => new Date(a).getTime() - new Date(b).getTime());
   if (allDates.length === 0) return [];
 
@@ -297,31 +319,23 @@ function createAllocationHistoryData(transactions: Transaction[], valuations: Va
   for (const date of allDates) {
     const compositionOnDate: Record<string, any> = { time: date };
     assetClasses.forEach(ac => compositionOnDate[ac] = 0);
-
     const holdingsOnDate: Record<string, number> = {};
     transactions.filter(tx => tx.transaction_date.split('T')[0] <= date).forEach(tx => {
       holdingsOnDate[tx.asset_id] = (holdingsOnDate[tx.asset_id] || 0) + (tx.type === 'BUY' ? tx.quantity : -tx.quantity);
     });
-
     for (const assetId in holdingsOnDate) {
       const quantity = holdingsOnDate[assetId];
       if (quantity > 0) {
         const asset = assetDetailsMap.get(assetId)!;
         const latestValuationForAsset = valuations.filter(v => v.asset_id === assetId && v.date <= date)
             .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        const assetValueOnDate = latestValuationForAsset?.value || 0;
-
-        if (asset.asset_class === 'Cash') {
-          compositionOnDate[asset.asset_class] += quantity;
-        } else {
-          compositionOnDate[asset.asset_class] += quantity * assetValueOnDate;
-        }
+        const priceOnDate = asset.asset_class === 'Cash' ? 1 : latestValuationForAsset?.value || 0;
+        compositionOnDate[asset.asset_class] += quantity * priceOnDate;
       }
     }
     history.push(compositionOnDate);
   }
 
-  // Forward-fill the data to ensure smooth charts
   for (let i = 1; i < history.length; i++) {
     for (const ac of assetClasses) {
       if (history[i][ac] === undefined || history[i][ac] === 0) {
@@ -330,7 +344,6 @@ function createAllocationHistoryData(transactions: Transaction[], valuations: Va
     }
   }
 
-  // Extend to today
   const lastHistoryPoint = history[history.length - 1];
   if (lastHistoryPoint && lastHistoryPoint.time < todayString) {
     history.push({ ...lastHistoryPoint, time: todayString });
@@ -370,7 +383,7 @@ watch(selectedPortfolioId, () => {
         <p class="text-muted-foreground">All info about your investments</p>
         <h1 class="text-2xl font-semibold md:text-3xl">Dashboard</h1>
       </div>
-      <div>
+      <div class="w-full md:w-64">
         <Select v-model="selectedPortfolioId">
           <SelectTrigger>
             <SelectValue placeholder="Select a portfolio" />

@@ -53,7 +53,7 @@ const handleLogout = async () => {
                   {{ user.email || 'User Account' }}
                 </span>
 
-              <NuxtLink to="/profile" class="text-xs text-muted-foreground hover:text-primary">
+              <NuxtLink to="/account" class="text-xs text-muted-foreground hover:text-primary">
                 Manage Account
               </NuxtLink>
             </div>
@@ -85,7 +85,7 @@ const handleLogout = async () => {
                   {{ user.email || 'User Account' }}
                 </span>
 
-              <NuxtLink to="/profile" class="text-xs text-muted-foreground hover:text-primary">
+              <NuxtLink to="/account" class="text-xs text-muted-foreground hover:text-primary">
                 Manage Account
               </NuxtLink>
             </div>
