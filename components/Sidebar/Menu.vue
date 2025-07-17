@@ -26,6 +26,11 @@
       icon: "carbon:chart-evaluation"
     },
     {
+      title: "Reports",
+      path: "/reports",
+      icon: "line-md:document-report"
+    },
+    {
       title: "Account",
       path: "/account",
       icon: "material-symbols:account-circle-full"

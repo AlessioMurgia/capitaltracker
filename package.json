@@ -19,6 +19,9 @@
     "chart.js": "^4.4.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "html2canvas-pro": "^1.5.11",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
     "lucide-vue-next": "^0.503.0",
     "nuxt": "^3.16.2",
     "nuxt-charts": "^0.1.8",
@@ -31,5 +34,8 @@
     "vue-router": "^4.5.0",
     "vue-sonner": "^2.0.1",
     "vue3-apexcharts": "^1.8.0"
+  },
+  "devDependencies": {
+    "@types/jspdf": "^2.0.0"
   }
 }

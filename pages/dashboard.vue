@@ -5,7 +5,6 @@ import MainLineChart from  "~/components/charts/MainLineChart.vue";
 import AllocationAreaChart from '~/components/charts/AllocationAreaChart.vue';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
@@ -56,7 +55,7 @@ const sectorAllocationData = ref<AllocationDataPoint[]>([]);
 const geographicAllocationData = ref<AllocationDataPoint[]>([]);
 const platformAllocationData = ref<AllocationDataPoint[]>([]);
 const assetAllocationHistoryData = ref<any[]>([]);
-const recentTransactions = ref<Transaction[]>([]); // New ref for recent transactions
+const recentTransactions = ref<Transaction[]>([]);
 
 const commonChartCategories = { value: { name: 'Value', color: '#3b82f6' } };
 const portfolioValueChartTabs = ref([
@@ -112,7 +111,7 @@ async function loadAndProcessData() {
     geographicAllocationData.value = [];
     platformAllocationData.value = [];
     assetAllocationHistoryData.value = [];
-    recentTransactions.value = []; // Reset recent transactions
+    recentTransactions.value = [];
     portfolioValueChartTabs.value.forEach(tab => tab.chartData = []);
     kpiCardsData.value.forEach(card => { card.amount = 0; card.progression = 0; });
 
@@ -120,7 +119,6 @@ async function loadAndProcessData() {
     if (txError) throw txError;
     if (!transactions || transactions.length === 0) { isLoading.value = false; return; }
 
-    // --- NEW: Populate recent transactions ---
     recentTransactions.value = transactions.slice(0, 5);
 
     const assetIds = [...new Set(transactions.map(tx => tx.asset_id))];
@@ -482,9 +480,28 @@ watch(selectedPortfolioId, () => {
 
     <footer class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <h2 class="text-xl font-semibold mb-2">Recent Transactions</h2>
-        <a href="/transactions" class="text-sm text-blue-500 hover:underline">View All</a>
-        <div class="h-[250px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded"><p>[Recent Transactions Placeholder]</p></div>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xl font-semibold">Recent Transactions</h2>
+          <a href="/transactions" class="text-sm text-blue-500 hover:underline">View All</a>
+        </div>
+        <!-- MODIFIED: Replaced placeholder with dynamic list -->
+        <div class="space-y-4">
+          <div v-if="recentTransactions.length === 0" class="text-center py-10 text-muted-foreground">
+            <p>No recent transactions to display.</p>
+          </div>
+          <div v-for="tx in recentTransactions" :key="tx.id" class="flex items-center">
+            <div class="ml-4 space-y-1">
+              <p class="text-sm font-medium leading-none">{{ tx.assets.name }}</p>
+              <p class="text-sm text-muted-foreground">
+                {{ tx.type === 'BUY' ? 'Bought' : 'Sold' }} {{ tx.quantity.toLocaleString() }} shares
+              </p>
+            </div>
+            <div class="ml-auto font-medium text-right" :class="tx.type === 'BUY' ? 'text-green-600' : 'text-red-600'">
+              {{ tx.type === 'BUY' ? '+' : '-' }}€{{ (tx.quantity * tx.price_per_unit).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}
+              <p class="text-xs text-muted-foreground font-normal">{{ new Date(tx.transaction_date).toLocaleDateString() }}</p>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
         <h2 class="text-xl font-semibold mb-2">Next Dividends/Payouts</h2>

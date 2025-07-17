@@ -6,6 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from '@/components/ui/input';
 import { Toaster, toast } from 'vue-sonner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { UserCircle } from 'lucide-vue-next';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
@@ -79,6 +80,39 @@ async function handleImageUpload(event: Event) {
     if (input) {
       input.value = '';
     }
+  }
+}
+
+// --- NEW: Remove Avatar Logic ---
+async function removeAvatar() {
+  if (!user.value || !avatarUrl.value) return;
+
+  isLoading.value = true;
+  try {
+    // Extract the file path from the full URL
+    const oldFilePath = new URL(avatarUrl.value).pathname.split('/avatars/')[1];
+
+    // Remove the file from storage
+    const { error: removeError } = await supabase.storage
+        .from('avatars')
+        .remove([oldFilePath]);
+
+    if (removeError) throw removeError;
+
+    // Remove the URL from user metadata
+    const { error: updateUserError } = await supabase.auth.updateUser({
+      data: { avatar_url: null }
+    });
+
+    if (updateUserError) throw updateUserError;
+
+    avatarUrl.value = '';
+    toast.success("Profile picture removed.");
+
+  } catch (error: any) {
+    toast.error("Failed to remove picture: " + error.message);
+  } finally {
+    isLoading.value = false;
   }
 }
 
@@ -216,19 +250,24 @@ onMounted(() => {
             <div class="flex items-center gap-6">
               <Avatar class="w-24 h-24">
                 <AvatarImage :src="avatarUrl" alt="User Avatar" />
-                <AvatarFallback>{{ fullName.charAt(0) || email.charAt(0) }}</AvatarFallback>
+                <AvatarFallback>
+                  <UserCircle class="w-full h-full text-muted-foreground" />
+                </AvatarFallback>
               </Avatar>
-              <div>
+              <div class="flex flex-col gap-2">
                 <Button @click="triggerFileInput" :disabled="isUploading">
                   {{ isUploading ? 'Uploading...' : 'Change Picture' }}
                 </Button>
-                <p class="text-xs text-muted-foreground mt-2">JPG, PNG, or GIF. 1MB max.</p>
+                <!-- NEW: Remove Picture Button -->
+                <Button v-if="avatarUrl" @click="removeAvatar" variant="outline" size="sm" :disabled="isLoading">
+                  Remove Picture
+                </Button>
+                <p class="text-xs text-muted-foreground mt-1">JPG, PNG, or GIF. 1MB max.</p>
                 <input type="file" ref="fileInput" @change="handleImageUpload" accept="image/png, image/jpeg, image/gif" class="hidden" />
               </div>
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
               <label for="email" class="text-right text-sm font-medium">Email</label>
-              <!-- THE FIX: Changed :value to v-model for consistency -->
               <Input id="email" type="email" v-model="email" class="col-span-3" disabled />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
