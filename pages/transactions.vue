@@ -8,8 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Toaster, toast } from 'vue-sonner';
-import { ChevronsUpDown, Check } from 'lucide-vue-next';
+import { ChevronsUpDown, Check, Copy } from 'lucide-vue-next';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
@@ -38,6 +40,9 @@ interface Transaction {
   price_per_unit: number;
   transaction_date: string;
   fees: number | null;
+  is_recurring: boolean;
+  recurring_frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
+  recurring_end_date: string | null;
   assets: Asset;
   portfolios: Portfolio;
 }
@@ -52,6 +57,7 @@ const transactionToDelete = ref<Transaction | null>(null);
 
 const portfoliosList = ref<Portfolio[]>([]);
 const assetsList = ref<Asset[]>([]);
+const frequencyOptions = ['daily', 'weekly', 'monthly', 'yearly'];
 
 // --- Data Fetching ---
 async function fetchData() {
@@ -62,7 +68,7 @@ async function fetchData() {
     const { data, error } = await supabase
         .from('transactions')
         .select(`
-        id, portfolio_id, asset_id, type, quantity, price_per_unit, transaction_date, fees,
+        id, portfolio_id, asset_id, type, quantity, price_per_unit, transaction_date, fees, is_recurring, recurring_frequency, recurring_end_date,
         assets ( id, name, asset_class ),
         portfolios ( id, name )
       `)
@@ -106,7 +112,7 @@ const filteredTransactions = computed(() => {
   );
 });
 
-// --- CRUD Handlers with Optimistic UI ---
+// --- CRUD Handlers ---
 
 async function openCreateDialog() {
   await fetchDropdownData();
@@ -116,8 +122,29 @@ async function openCreateDialog() {
     price_per_unit: 0,
     fees: 0,
     transaction_date: new Date().toISOString().split('T')[0],
+    is_recurring: false,
+    recurring_frequency: 'monthly',
+    recurring_end_date: null,
   };
   isDialogOpen.value = true;
+}
+
+async function repeatTransaction(templateTx: Transaction) {
+  await fetchDropdownData();
+  transactionToEdit.value = {
+    portfolio_id: templateTx.portfolio_id,
+    asset_id: templateTx.asset_id,
+    type: templateTx.type,
+    quantity: templateTx.quantity,
+    price_per_unit: templateTx.price_per_unit,
+    fees: templateTx.fees,
+    is_recurring: templateTx.is_recurring,
+    recurring_frequency: templateTx.recurring_frequency,
+    recurring_end_date: templateTx.recurring_end_date,
+    transaction_date: new Date().toISOString().split('T')[0],
+  };
+  isDialogOpen.value = true;
+  toast.info(`Pre-filled form from recurring transaction. Please update date and price.`);
 }
 
 async function openEditDialog(transaction: Transaction) {
@@ -126,7 +153,6 @@ async function openEditDialog(transaction: Transaction) {
   isDialogOpen.value = true;
 }
 
-// --- MODIFIED: Implements robust, safe automatic valuation creation ---
 async function saveTransaction() {
   const tx = transactionToEdit.value;
   if (!tx.portfolio_id || !tx.asset_id || !tx.quantity || !tx.price_per_unit || !tx.transaction_date) {
@@ -142,6 +168,9 @@ async function saveTransaction() {
     price_per_unit: tx.price_per_unit,
     transaction_date: tx.transaction_date,
     fees: tx.fees || null,
+    is_recurring: tx.is_recurring ?? false,
+    recurring_frequency: tx.is_recurring ? tx.recurring_frequency : null,
+    recurring_end_date: tx.is_recurring ? tx.recurring_end_date : null,
   };
 
   if (tx.id) {
@@ -178,57 +207,23 @@ async function saveTransaction() {
     toast.success(`Transaction created successfully.`);
     isDialogOpen.value = false;
 
-    // --- NEW LOGIC: Safely create initial valuation ---
     const selectedAsset = assetsList.value.find(a => a.id === data.asset_id);
     const isPrivateAsset = selectedAsset && ['Real Estate', 'Cash', 'Venture Capital', 'Other'].includes(selectedAsset.asset_class);
 
     if (isPrivateAsset && data.type === 'BUY') {
-      const { data: existingValuations, error: checkError } = await supabase
-          .from('asset_valuations')
-          .select('id')
-          .eq('asset_id', data.asset_id)
-          .limit(1);
-
-      if (checkError) {
-        toast.error("Could not check for existing valuations.");
-        return;
-      }
+      const { data: existingValuations, error: checkError } = await supabase.from('asset_valuations').select('id').eq('asset_id', data.asset_id).limit(1);
+      if (checkError) { toast.error("Could not check for existing valuations."); return; }
 
       if (!existingValuations || existingValuations.length === 0) {
-        // --- THE CORE FIX: Manually determine the next ID ---
-        const { data: maxIdData, error: maxIdError } = await supabase
-            .from('asset_valuations')
-            .select('id')
-            .order('id', { ascending: false })
-            .limit(1)
-            .single();
-
-        if (maxIdError && maxIdError.code !== 'PGRST116') { // Ignore "0 rows" error
-          toast.error("Could not determine next valuation ID.");
-          return;
-        }
+        const { data: maxIdData, error: maxIdError } = await supabase.from('asset_valuations').select('id').order('id', { ascending: false }).limit(1).single();
+        if (maxIdError && maxIdError.code !== 'PGRST116') { toast.error("Could not determine next valuation ID."); return; }
 
         const nextId = (maxIdData?.id || 0) + 1;
+        const valuationValue = selectedAsset.asset_class === 'Cash' ? data.quantity : data.price_per_unit;
 
-        const valuationValue = selectedAsset.asset_class === 'Cash'
-            ? data.quantity
-            : data.price_per_unit;
-
-        const { error: valError } = await supabase
-            .from('asset_valuations')
-            .insert({
-              id: nextId, // Explicitly provide the new ID
-              asset_id: data.asset_id,
-              date: data.transaction_date,
-              value: valuationValue,
-              source: 'MANUAL'
-            });
-
-        if (valError) {
-          toast.error("Auto-valuation failed: " + valError.message);
-        } else {
-          toast.info(`Initial valuation for "${selectedAsset.name}" created.`);
-        }
+        const { error: valError } = await supabase.from('asset_valuations').insert({ id: nextId, asset_id: data.asset_id, date: data.transaction_date, value: valuationValue, source: 'MANUAL' });
+        if (valError) { toast.error("Auto-valuation failed: " + valError.message); }
+        else { toast.info(`Initial valuation for "${selectedAsset.name}" created.`); }
       }
     }
   }
@@ -298,8 +293,7 @@ onMounted(() => {
               <TableHead>Portfolio</TableHead>
               <TableHead>Asset</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead class="text-right">Quantity</TableHead>
-              <TableHead class="text-right">Price</TableHead>
+              <TableHead>Recurring</TableHead>
               <TableHead class="text-right">Total Value</TableHead>
               <TableHead class="text-right">Actions</TableHead>
             </TableRow>
@@ -312,10 +306,15 @@ onMounted(() => {
               <TableCell>
                 <span :class="tx.type === 'BUY' ? 'text-green-600' : 'text-red-600'" class="font-semibold">{{ tx.type }}</span>
               </TableCell>
-              <TableCell class="text-right">{{ tx.quantity.toLocaleString() }}</TableCell>
-              <TableCell class="text-right">€{{ tx.price_per_unit.toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
+              <TableCell>
+                <span v-if="tx.is_recurring" class="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 capitalize">{{ tx.recurring_frequency }}</span>
+                <span v-else class="text-muted-foreground">No</span>
+              </TableCell>
               <TableCell class="text-right font-medium">€{{ (tx.quantity * tx.price_per_unit).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
               <TableCell class="text-right">
+                <Button variant="ghost" size="sm" @click="repeatTransaction(tx)" title="Repeat Transaction">
+                  <Copy class="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="sm" @click="openEditDialog(tx)">Edit</Button>
                 <Button variant="ghost" size="sm" @click="openDeleteDialog(tx)" class="text-red-500 hover:text-red-600">Delete</Button>
               </TableCell>
@@ -326,32 +325,32 @@ onMounted(() => {
 
       <!-- Create/Edit Dialog -->
       <Dialog :open="isDialogOpen" @update:open="isDialogOpen = $event">
-        <DialogContent class="sm:max-w-[425px]">
+        <DialogContent class="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{{ transactionToEdit?.id ? 'Edit Transaction' : 'Create New Transaction' }}</DialogTitle>
           </DialogHeader>
           <div class="grid gap-4 py-4">
 
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label class="text-right">Portfolio</label>
+            <div class="space-y-2">
+              <Label>Portfolio</Label>
               <Select v-model="transactionToEdit.portfolio_id">
-                <SelectTrigger class="col-span-3"><SelectValue placeholder="Select a portfolio" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select a portfolio" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   <SelectItem v-for="p in portfoliosList" :key="p.id" :value="p.id">{{ p.name }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
 
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label class="text-right">Asset</label>
-              <Popover class="col-span-3">
+            <div class="space-y-2">
+              <Label>Asset</Label>
+              <Popover>
                 <PopoverTrigger as-child>
-                  <Button variant="outline" role="combobox" class="w-full justify-between col-span-3">
+                  <Button variant="outline" role="combobox" class="w-full justify-between">
                     {{ transactionToEdit.asset_id ? assetsList.find(a => a.id === transactionToEdit.asset_id)?.name : "Select asset..." }}
                     <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent class="w-[375px] p-0">
+                <PopoverContent class="w-[--radix-popover-trigger-width] p-0">
                   <Command>
                     <CommandInput placeholder="Search asset..." />
                     <CommandList>
@@ -368,35 +367,65 @@ onMounted(() => {
               </Popover>
             </div>
 
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label class="text-right">Type</label>
-              <Select v-model="transactionToEdit.type">
-                <SelectTrigger class="col-span-3"><SelectValue placeholder="Select a type" /></SelectTrigger>
-                <SelectContent><SelectGroup>
-                  <SelectItem value="BUY">BUY</SelectItem>
-                  <SelectItem value="SELL">SELL</SelectItem>
-                </SelectGroup></SelectContent>
-              </Select>
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <Label>Type</Label>
+                <Select v-model="transactionToEdit.type">
+                  <SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger>
+                  <SelectContent><SelectGroup>
+                    <SelectItem value="BUY">BUY</SelectItem>
+                    <SelectItem value="SELL">SELL</SelectItem>
+                  </SelectGroup></SelectContent>
+                </Select>
+              </div>
+              <div class="space-y-2">
+                <Label for="date">Date</Label>
+                <Input id="date" type="date" v-model="transactionToEdit.transaction_date" />
+              </div>
             </div>
 
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="quantity" class="text-right">Quantity</label>
-              <Input id="quantity" type="number" v-model="transactionToEdit.quantity" class="col-span-3" />
+            <div class="grid grid-cols-2 gap-4">
+              <div class="space-y-2">
+                <Label for="quantity">Quantity</Label>
+                <Input id="quantity" type="number" v-model="transactionToEdit.quantity" />
+              </div>
+              <div class="space-y-2">
+                <Label for="price">Price / Unit</Label>
+                <Input id="price" type="number" v-model="transactionToEdit.price_per_unit" />
+              </div>
             </div>
 
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="price" class="text-right">Price / Unit</label>
-              <Input id="price" type="number" v-model="transactionToEdit.price_per_unit" class="col-span-3" />
+            <div class="space-y-2">
+              <Label for="fees">Fees (€)</Label>
+              <Input id="fees" type="number" v-model="transactionToEdit.fees" />
             </div>
 
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="date" class="text-right">Date</label>
-              <Input id="date" type="date" v-model="transactionToEdit.transaction_date" class="col-span-3" />
+            <div class="flex items-center space-x-2 pt-4 border-t mt-2">
+              <!-- THE FIX: Switched to the correct, robust binding pattern -->
+              <Switch
+                  id="is-recurring"
+                  :model-value="transactionToEdit.is_recurring"
+                  @update:model-value="(newValue) => { transactionToEdit.is_recurring = newValue }"
+
+              />
+
+              <Label for="is-recurring">Mark as a recurring transaction template</Label>
             </div>
 
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="fees" class="text-right">Fees</label>
-              <Input id="fees" type="number" v-model="transactionToEdit.fees" class="col-span-3" />
+            <div v-if="transactionToEdit.is_recurring" class="grid grid-cols-2 gap-4 pt-4 border-t">
+              <div class="space-y-2">
+                <Label>Frequency</Label>
+                <Select v-model="transactionToEdit.recurring_frequency">
+                  <SelectTrigger><SelectValue placeholder="Select frequency" /></SelectTrigger>
+                  <SelectContent><SelectGroup>
+                    <SelectItem v-for="f in frequencyOptions" :key="f" :value="f" class="capitalize">{{ f }}</SelectItem>
+                  </SelectGroup></SelectContent>
+                </Select>
+              </div>
+              <div class="space-y-2">
+                <Label for="end-date">End Date (Optional)</Label>
+                <Input id="end-date" type="date" v-model="transactionToEdit.recurring_end_date" />
+              </div>
             </div>
 
           </div>

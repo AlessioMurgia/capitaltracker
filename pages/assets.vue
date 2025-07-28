@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Toaster, toast } from 'vue-sonner';
 
 // --- Supabase & Data Loading ---
@@ -18,12 +19,13 @@ const dataError = ref<string | null>(null);
 // --- Interfaces ---
 interface Asset {
   id: string;
-  user_id: string | null;
+  user_id: string;
   asset_class: string;
   name: string;
   ticker: string | null;
   isin: string | null;
   currency: string;
+  auto_tracking: boolean;
   metadata: {
     geography?: string;
     sector?: string;
@@ -53,7 +55,7 @@ async function fetchData() {
     const { data, error } = await supabase
         .from('assets')
         .select('*')
-        .or(`user_id.eq.${user.value.id},user_id.is.null`)
+        .eq('user_id', user.value.id)
         .order('name', { ascending: true });
 
     if (error) throw error;
@@ -79,7 +81,7 @@ const filteredAssets = computed(() => {
   );
 });
 
-// --- CRUD Handlers with Optimistic UI ---
+// --- CRUD Handlers ---
 
 function openCreateDialog() {
   assetToEdit.value = {
@@ -88,44 +90,46 @@ function openCreateDialog() {
     ticker: '',
     isin: '',
     currency: 'EUR',
+    auto_tracking: true,
     metadata: {
       sector: '',
       geography: '',
-      platform: ''
+      platform: '',
     }
   };
   isDialogOpen.value = true;
 }
 
 function openEditDialog(asset: Asset) {
-  if (asset.user_id !== user.value?.id) {
-    toast.info("Public assets cannot be edited.");
-    return;
-  }
-  assetToEdit.value = JSON.parse(JSON.stringify(asset)); // Deep copy to avoid reactive issues
-  if (!assetToEdit.value.metadata) { // Ensure metadata object exists for binding
+  assetToEdit.value = JSON.parse(JSON.stringify(asset));
+  if (!assetToEdit.value.metadata) {
     assetToEdit.value.metadata = {};
   }
   isDialogOpen.value = true;
 }
 
 async function saveAsset() {
-  if (!assetToEdit.value || !assetToEdit.value.name || !assetToEdit.value.asset_class) {
+  if (!user.value || !assetToEdit.value || !assetToEdit.value.name || !assetToEdit.value.asset_class) {
     toast.error("Asset Name and Class are required.");
     return;
   }
 
-  const isPublicAsset = ['Stock', 'ETF'].includes(assetToEdit.value.asset_class);
+  const isPublicType = ['Stock', 'ETF'].includes(assetToEdit.value.asset_class);
 
   const assetData = {
-    user_id: isPublicAsset ? null : user.value!.id,
+    user_id: user.value.id,
     name: assetToEdit.value.name,
     asset_class: assetToEdit.value.asset_class,
-    ticker: isPublicAsset ? assetToEdit.value.ticker?.toUpperCase() || null : null,
-    isin: isPublicAsset ? assetToEdit.value.isin?.toUpperCase() || null : null,
+    ticker: isPublicType ? assetToEdit.value.ticker?.toUpperCase() || null : null,
+    isin: isPublicType ? assetToEdit.value.isin?.toUpperCase() || null : null,
     currency: assetToEdit.value.currency || 'USD',
+    auto_tracking: isPublicType ? assetToEdit.value.auto_tracking ?? true : false,
     metadata: assetToEdit.value.metadata || {},
   };
+  if (assetData.metadata.auto_tracking !== undefined) {
+    delete assetData.metadata.auto_tracking;
+  }
+
 
   if (assetToEdit.value.id) {
     // --- UPDATE ---
@@ -153,11 +157,7 @@ async function saveAsset() {
         .single();
 
     if (error) {
-      if (error.code === '23505') {
-        toast.info("This public asset already exists.");
-      } else {
-        toast.error("Failed to create asset: " + error.message);
-      }
+      toast.error("Failed to create asset: " + error.message);
     } else {
       allAssets.value.push(data);
       allAssets.value.sort((a, b) => a.name.localeCompare(b.name));
@@ -168,10 +168,6 @@ async function saveAsset() {
 }
 
 function openDeleteDialog(asset: Asset) {
-  if (asset.user_id !== user.value?.id) {
-    toast.info("Public assets cannot be deleted.");
-    return;
-  }
   assetToDelete.value = asset;
   isDeleteDialogOpen.value = true;
 }
@@ -227,7 +223,7 @@ onMounted(() => {
       <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div class="grow">
           <h1 class="text-2xl font-semibold md:text-3xl">Assets</h1>
-          <p class="text-muted-foreground">Manage your universe of public and private assets.</p>
+          <p class="text-muted-foreground">Manage your personal list of assets.</p>
         </div>
         <div class="flex items-center gap-4">
           <Input v-model="searchTerm" placeholder="Search by name, ticker, or ISIN..." class="w-full md:w-72" />
@@ -251,7 +247,7 @@ onMounted(() => {
               <TableHead>Name</TableHead>
               <TableHead>Asset Class</TableHead>
               <TableHead>Ticker / ISIN</TableHead>
-              <TableHead>Ownership</TableHead>
+              <TableHead>Tracking</TableHead>
               <TableHead class="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -267,13 +263,12 @@ onMounted(() => {
                 </div>
               </TableCell>
               <TableCell>
-                        <span :class="asset.user_id ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'" class="px-2 py-1 text-xs rounded-full">
-                            {{ asset.user_id ? 'Private' : 'Public' }}
-                        </span>
+                <span v-if="asset.auto_tracking" class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Auto</span>
+                <span v-else class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">Manual</span>
               </TableCell>
               <TableCell class="text-right">
-                <Button variant="ghost" size="sm" @click="openEditDialog(asset)" :disabled="!asset.user_id">Edit</Button>
-                <Button variant="ghost" size="sm" @click="openDeleteDialog(asset)" :disabled="!asset.user_id" class="text-red-500 hover:text-red-600">Delete</Button>
+                <Button variant="ghost" size="sm" @click="openEditDialog(asset)">Edit</Button>
+                <Button variant="ghost" size="sm" @click="openDeleteDialog(asset)" class="text-red-500 hover:text-red-600">Delete</Button>
               </TableCell>
             </TableRow>
           </TableBody>
@@ -282,58 +277,72 @@ onMounted(() => {
 
       <!-- Create/Edit Dialog -->
       <Dialog :open="isDialogOpen" @update:open="isDialogOpen = $event">
-        <DialogContent class="sm:max-w-[425px]">
+        <DialogContent class="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{{ assetToEdit?.id ? 'Edit Asset' : 'Create New Asset' }}</DialogTitle>
           </DialogHeader>
-          <div v-if="assetToEdit" class="grid gap-4 py-4">
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="asset_class" class="text-right">Asset Class</label>
+          <!-- MODIFIED: Replaced layout for a compact, professional form -->
+          <div v-if="assetToEdit" class="flex flex-col gap-4 py-4">
+
+            <div class="space-y-2">
+              <Label for="asset_class">Asset Class</Label>
               <Select v-model="assetToEdit.asset_class" :disabled="!!assetToEdit.id">
-                <SelectTrigger class="col-span-3"><SelectValue placeholder="Select a class" /></SelectTrigger>
+                <SelectTrigger id="asset_class"><SelectValue placeholder="Select a class" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   <SelectItem v-for="ac in assetClasses" :key="ac" :value="ac">{{ ac }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="name" class="text-right">Name</label>
-              <Input id="name" v-model="assetToEdit.name" class="col-span-3" />
+
+            <div class="space-y-2">
+              <Label for="name">Name</Label>
+              <Input id="name" v-model="assetToEdit.name" />
             </div>
+
             <template v-if="assetToEdit.asset_class === 'Stock' || assetToEdit.asset_class === 'ETF'">
-              <div class="grid grid-cols-4 items-center gap-4">
-                <label for="ticker" class="text-right">Ticker</label>
-                <Input id="ticker" v-model="assetToEdit.ticker" class="col-span-3" />
-              </div>
-              <div class="grid grid-cols-4 items-center gap-4">
-                <label for="isin" class="text-right">ISIN</label>
-                <Input id="isin" v-model="assetToEdit.isin" class="col-span-3" />
+              <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                  <Label for="ticker">Ticker</Label>
+                  <Input id="ticker" v-model="assetToEdit.ticker" />
+                </div>
+                <div class="space-y-2">
+                  <Label for="isin">ISIN</Label>
+                  <Input id="isin" v-model="assetToEdit.isin" />
+                </div>
               </div>
             </template>
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="currency" class="text-right">Currency</label>
+
+            <div class="space-y-2">
+              <Label for="currency">Currency</Label>
               <Select v-model="assetToEdit.currency">
-                <SelectTrigger class="col-span-3"><SelectValue placeholder="Select a currency" /></SelectTrigger>
+                <SelectTrigger id="currency"><SelectValue placeholder="Select a currency" /></SelectTrigger>
                 <SelectContent><SelectGroup>
                   <SelectItem v-for="c in currencyOptions" :key="c" :value="c">{{ c }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
-            <!-- Metadata fields -->
+
             <template v-if="assetToEdit.asset_class !== 'Cash'">
-              <div class="grid grid-cols-4 items-center gap-4">
-                <label for="platform" class="text-right">Platform</label>
-                <Input id="platform" v-model="assetToEdit.metadata!.platform" class="col-span-3" placeholder="e.g., Degiro, Interactive Brokers" />
+              <div class="space-y-2">
+                <Label for="platform">Platform</Label>
+                <Input id="platform" v-model="assetToEdit.metadata!.platform" placeholder="e.g., Degiro, Bank" />
               </div>
-              <div class="grid grid-cols-4 items-center gap-4">
-                <label for="sector" class="text-right">Sector</label>
-                <Input id="sector" v-model="assetToEdit.metadata!.sector" class="col-span-3" placeholder="e.g., Technology, Healthcare" />
-              </div>
-              <div class="grid grid-cols-4 items-center gap-4">
-                <label for="geography" class="text-right">Geography</label>
-                <Input id="geography" v-model="assetToEdit.metadata!.geography" class="col-span-3" placeholder="e.g., USA, Europe, Italy" />
+              <div class="grid grid-cols-2 gap-4">
+                <div class="space-y-2">
+                  <Label for="sector">Sector</Label>
+                  <Input id="sector" v-model="assetToEdit.metadata!.sector" placeholder="e.g., Technology" />
+                </div>
+                <div class="space-y-2">
+                  <Label for="geography">Geography</Label>
+                  <Input id="geography" v-model="assetToEdit.metadata!.geography" placeholder="e.g., USA, Europe" />
+                </div>
               </div>
             </template>
+
+            <div v-if="assetToEdit.asset_class === 'Stock' || assetToEdit.asset_class === 'ETF'" class="flex items-center space-x-2 pt-2">
+              <Switch id="auto-tracking-mode" v-model:checked="assetToEdit.auto_tracking" />
+              <Label for="auto-tracking-mode">Enable Auto Tracking for this asset</Label>
+            </div>
           </div>
           <DialogFooter>
             <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
@@ -348,7 +357,7 @@ onMounted(() => {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the private asset "{{ assetToDelete?.name }}". This action cannot be undone.
+              This will permanently delete the asset "{{ assetToDelete?.name }}". This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -381,7 +381,7 @@ watch(selectedPortfolioId, () => {
         <p class="text-muted-foreground">All info about your investments</p>
         <h1 class="text-2xl font-semibold md:text-3xl">Dashboard</h1>
       </div>
-      <div class="w-full md:w-64">
+      <div>
         <Select v-model="selectedPortfolioId">
           <SelectTrigger>
             <SelectValue placeholder="Select a portfolio" />

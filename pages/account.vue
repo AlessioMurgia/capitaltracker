@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -25,6 +25,11 @@ const deleteConfirmationText = ref('');
 const isDeleteDialogOpen = ref(false);
 
 const fileInput = ref<HTMLInputElement | null>(null);
+
+// --- Computed property to check auth provider ---
+const isPasswordUser = computed(() => {
+  return user.value?.app_metadata.provider === 'email';
+});
 
 // --- Data Fetching ---
 watch(user, (currentUser) => {
@@ -83,23 +88,19 @@ async function handleImageUpload(event: Event) {
   }
 }
 
-// --- NEW: Remove Avatar Logic ---
 async function removeAvatar() {
   if (!user.value || !avatarUrl.value) return;
 
   isLoading.value = true;
   try {
-    // Extract the file path from the full URL
     const oldFilePath = new URL(avatarUrl.value).pathname.split('/avatars/')[1];
 
-    // Remove the file from storage
     const { error: removeError } = await supabase.storage
         .from('avatars')
         .remove([oldFilePath]);
 
     if (removeError) throw removeError;
 
-    // Remove the URL from user metadata
     const { error: updateUserError } = await supabase.auth.updateUser({
       data: { avatar_url: null }
     });
@@ -258,7 +259,6 @@ onMounted(() => {
                 <Button @click="triggerFileInput" :disabled="isUploading">
                   {{ isUploading ? 'Uploading...' : 'Change Picture' }}
                 </Button>
-                <!-- NEW: Remove Picture Button -->
                 <Button v-if="avatarUrl" @click="removeAvatar" variant="outline" size="sm" :disabled="isLoading">
                   Remove Picture
                 </Button>
@@ -281,7 +281,7 @@ onMounted(() => {
         </Card>
 
         <!-- Security Card -->
-        <Card>
+        <Card v-if="isPasswordUser">
           <CardHeader>
             <CardTitle>Security</CardTitle>
             <CardDescription>Change your password.</CardDescription>
@@ -298,6 +298,38 @@ onMounted(() => {
           </CardContent>
           <CardFooter class="flex justify-end">
             <Button @click="updatePassword" :disabled="isLoading">Update Password</Button>
+          </CardFooter>
+        </Card>
+        <Card v-else>
+          <CardHeader>
+            <CardTitle>Security</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p class="text-sm text-muted-foreground">
+              You are logged in with a social provider (e.g., Google). Password management is handled by your provider.
+            </p>
+          </CardContent>
+        </Card>
+
+        <!-- NEW: Subscription Plan Card -->
+        <Card>
+          <CardHeader>
+            <CardTitle>Subscription Plan</CardTitle>
+            <CardDescription>Manage your subscription and unlock premium features.</CardDescription>
+          </CardHeader>
+          <CardContent class="flex items-center justify-between">
+            <div>
+              <p class="font-semibold">Current Plan: <span class="text-primary">Free</span></p>
+              <p class="text-sm text-muted-foreground">Access basic portfolio tracking features.</p>
+            </div>
+            <Button>Upgrade to Premium</Button>
+          </CardContent>
+          <CardFooter>
+            <ul class="text-xs text-muted-foreground list-disc list-inside space-y-1">
+              <li>Unlimited Portfolios</li>
+              <li>Advanced Analytics & Benchmarking</li>
+              <li>Automated Dividend Tracking</li>
+            </ul>
           </CardFooter>
         </Card>
 

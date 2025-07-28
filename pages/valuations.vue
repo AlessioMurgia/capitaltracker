@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Toaster, toast } from 'vue-sonner';
@@ -19,9 +18,10 @@ const dataError = ref<string | null>(null);
 // --- Interfaces ---
 interface Asset {
   id: string;
-  user_id: string | null;
+  user_id: string;
   asset_class: string;
   name: string;
+  auto_tracking: boolean;
 }
 
 interface Valuation {
@@ -44,8 +44,8 @@ interface Portfolio {
 // --- Component State ---
 const portfoliosList = ref<Portfolio[]>([]);
 const selectedPortfolioId = ref<string>('all');
-const publicAssets = ref<EnrichedAsset[]>([]);
-const privateAssets = ref<EnrichedAsset[]>([]);
+const autoTrackedAssets = ref<EnrichedAsset[]>([]);
+const manualTrackedAssets = ref<EnrichedAsset[]>([]);
 
 const isAddDialogOpen = ref(false);
 const isEditDialogOpen = ref(false);
@@ -82,7 +82,7 @@ async function fetchData() {
 
     const { data: transactions, error: txError } = await supabase
         .from('transactions')
-        .select('assets!inner(id, user_id, asset_class, name)')
+        .select('assets!inner(id, user_id, asset_class, name, auto_tracking)')
         .in('portfolio_id', targetPortfolioIds);
 
     if (txError) throw txError;
@@ -108,11 +108,11 @@ async function fetchData() {
       valuations: valuationsByAsset[asset.id] || []
     }));
 
-    // --- THE FIX: Filter out 'Cash' assets before displaying ---
     const nonCashAssets = enrichedAssets.filter(a => a.asset_class !== 'Cash');
 
-    publicAssets.value = nonCashAssets.filter(a => !a.user_id).sort((a,b) => a.name.localeCompare(b.name));
-    privateAssets.value = nonCashAssets.filter(a => a.user_id).sort((a,b) => a.name.localeCompare(b.name));
+    // MODIFIED: Segregate based on auto_tracking flag
+    autoTrackedAssets.value = nonCashAssets.filter(a => a.auto_tracking).sort((a,b) => a.name.localeCompare(b.name));
+    manualTrackedAssets.value = nonCashAssets.filter(a => !a.auto_tracking).sort((a,b) => a.name.localeCompare(b.name));
 
   } catch (error: any) {
     console.error("Error fetching valuation data:", error);
@@ -158,10 +158,10 @@ async function saveNewValuation() {
   if (error) {
     toast.error("Failed to add valuation: " + error.message);
   } else {
-    const assetIndex = privateAssets.value.findIndex(a => a.id === asset_id);
+    const assetIndex = manualTrackedAssets.value.findIndex(a => a.id === asset_id);
     if (assetIndex !== -1) {
-      privateAssets.value[assetIndex].valuations.unshift(data);
-      privateAssets.value[assetIndex].valuations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      manualTrackedAssets.value[assetIndex].valuations.unshift(data);
+      manualTrackedAssets.value[assetIndex].valuations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     toast.success(`New valuation for "${valuationToAdd.value.asset_name}" added.`);
     isAddDialogOpen.value = false;
@@ -177,13 +177,13 @@ async function saveEditedValuation() {
   if (error) {
     toast.error("Failed to update valuation: " + error.message);
   } else {
-    const assetIndex = privateAssets.value.findIndex(a => a.id === data.asset_id);
+    const assetIndex = manualTrackedAssets.value.findIndex(a => a.id === data.asset_id);
     if (assetIndex !== -1) {
-      const valIndex = privateAssets.value[assetIndex].valuations.findIndex(v => v.id === id);
+      const valIndex = manualTrackedAssets.value[assetIndex].valuations.findIndex(v => v.id === id);
       if (valIndex !== -1) {
-        privateAssets.value[assetIndex].valuations[valIndex] = data;
+        manualTrackedAssets.value[assetIndex].valuations[valIndex] = data;
       }
-      privateAssets.value[assetIndex].valuations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      manualTrackedAssets.value[assetIndex].valuations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     toast.success("Valuation updated.");
     isEditDialogOpen.value = false;
@@ -199,9 +199,9 @@ async function confirmDeleteValuation() {
   if (error) {
     toast.error("Failed to delete valuation: " + error.message);
   } else {
-    const assetIndex = privateAssets.value.findIndex(a => a.id === asset_id);
+    const assetIndex = manualTrackedAssets.value.findIndex(a => a.id === asset_id);
     if (assetIndex !== -1) {
-      privateAssets.value[assetIndex].valuations = privateAssets.value[assetIndex].valuations.filter(v => v.id !== id);
+      manualTrackedAssets.value[assetIndex].valuations = manualTrackedAssets.value[assetIndex].valuations.filter(v => v.id !== id);
     }
     toast.success("Valuation deleted.");
     isDeleteDialogOpen.value = false;
@@ -216,8 +216,8 @@ onMounted(() => {
       await fetchPortfolios();
       await fetchData();
     } else {
-      publicAssets.value = [];
-      privateAssets.value = [];
+      autoTrackedAssets.value = [];
+      manualTrackedAssets.value = [];
       portfoliosList.value = [];
     }
   }, { immediate: true });
@@ -261,14 +261,14 @@ watch(selectedPortfolioId, () => {
       <div v-else-if="dataError" class="text-red-500">{{ dataError }}</div>
 
       <div v-else class="grid grid-cols-1 gap-8">
-        <!-- Private Assets Section -->
+        <!-- MODIFIED: Manual Valuations Section -->
         <section>
-          <h2 class="text-xl font-semibold mb-4">Private Asset Valuations</h2>
-          <div v-if="privateAssets.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
-            <p class="text-muted-foreground">No non-cash private assets found in the selected portfolio(s).</p>
+          <h2 class="text-xl font-semibold mb-4">Manual Valuations</h2>
+          <div v-if="manualTrackedAssets.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
+            <p class="text-muted-foreground">No manually tracked assets found in the selected portfolio(s).</p>
           </div>
           <Accordion v-else type="single" collapsible class="w-full">
-            <AccordionItem v-for="asset in privateAssets" :key="asset.id" :value="asset.id">
+            <AccordionItem v-for="asset in manualTrackedAssets" :key="asset.id" :value="asset.id">
               <AccordionTrigger class="p-4 hover:bg-muted/50 rounded-md">
                 <div class="flex justify-between items-center w-full">
                   <div class="text-left">
@@ -309,11 +309,11 @@ watch(selectedPortfolioId, () => {
           </Accordion>
         </section>
 
-        <!-- Public Assets Section -->
+        <!-- MODIFIED: Auto-Tracked Valuations Section -->
         <section>
-          <h2 class="text-xl font-semibold mb-4">Public Asset Valuations</h2>
-          <div v-if="publicAssets.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
-            <p class="text-muted-foreground">No public assets found in the selected portfolio(s).</p>
+          <h2 class="text-xl font-semibold mb-4">Auto-Tracked Valuations</h2>
+          <div v-if="autoTrackedAssets.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
+            <p class="text-muted-foreground">No auto-tracked assets found in the selected portfolio(s).</p>
           </div>
           <div v-else class="border rounded-lg">
             <Table>
@@ -323,7 +323,7 @@ watch(selectedPortfolioId, () => {
                 <TableHead>Last Updated</TableHead>
                 <TableHead class="text-right">Latest Value</TableHead>
               </TableRow></TableHeader>
-              <TableBody><TableRow v-for="asset in publicAssets" :key="asset.id">
+              <TableBody><TableRow v-for="asset in autoTrackedAssets" :key="asset.id">
                 <TableCell class="font-medium">{{ asset.name }}</TableCell>
                 <TableCell>{{ asset.asset_class }}</TableCell>
                 <TableCell>{{ asset.valuations[0] ? new Date(asset.valuations[0].date).toLocaleDateString() : 'N/A' }}</TableCell>
