@@ -26,6 +26,7 @@ interface Asset {
   isin: string | null;
   currency: string;
   auto_tracking: boolean;
+  not_found: boolean; // MODIFIED: Added new field
   metadata: {
     geography?: string;
     sector?: string;
@@ -52,6 +53,7 @@ async function fetchData() {
   isLoading.value = true;
   dataError.value = null;
   try {
+    // MODIFIED: Select the new not_found column
     const { data, error } = await supabase
         .from('assets')
         .select('*')
@@ -91,6 +93,7 @@ function openCreateDialog() {
     isin: '',
     currency: 'EUR',
     auto_tracking: true,
+    not_found: false,
     metadata: {
       sector: '',
       geography: '',
@@ -125,6 +128,8 @@ async function saveAsset() {
     currency: assetToEdit.value.currency || 'USD',
     auto_tracking: isPublicType ? assetToEdit.value.auto_tracking ?? true : false,
     metadata: assetToEdit.value.metadata || {},
+    // MODIFIED: When a user saves, we assume they fixed the issue, so we reset the flag.
+    not_found: false,
   };
   if (assetData.metadata.auto_tracking !== undefined) {
     delete assetData.metadata.auto_tracking;
@@ -252,7 +257,8 @@ onMounted(() => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="asset in filteredAssets" :key="asset.id">
+            <!-- MODIFIED: Added dynamic class and title for error state -->
+            <TableRow v-for="asset in filteredAssets" :key="asset.id" :class="{ 'bg-red-50 border-l-4 border-red-500': asset.not_found }" title="Auto-tracking failed for this asset. Please edit the Ticker/ISIN and save to try again.">
               <TableCell class="font-medium">{{ asset.name }}</TableCell>
               <TableCell>{{ asset.asset_class }}</TableCell>
               <TableCell class="text-muted-foreground">
@@ -281,7 +287,6 @@ onMounted(() => {
           <DialogHeader>
             <DialogTitle>{{ assetToEdit?.id ? 'Edit Asset' : 'Create New Asset' }}</DialogTitle>
           </DialogHeader>
-          <!-- MODIFIED: Replaced layout for a compact, professional form -->
           <div v-if="assetToEdit" class="flex flex-col gap-4 py-4">
 
             <div class="space-y-2">
