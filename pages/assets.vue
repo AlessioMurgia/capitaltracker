@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Toaster, toast } from 'vue-sonner';
+import { Pencil, Trash2 } from 'lucide-vue-next';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
@@ -26,7 +27,7 @@ interface Asset {
   isin: string | null;
   currency: string;
   auto_tracking: boolean;
-  not_found: boolean; // MODIFIED: Added new field
+  not_found: boolean;
   metadata: {
     geography?: string;
     sector?: string;
@@ -38,7 +39,6 @@ interface Asset {
 
 // --- Component State ---
 const allAssets = ref<Asset[]>([]);
-const searchTerm = ref('');
 const isDialogOpen = ref(false);
 const isDeleteDialogOpen = ref(false);
 const assetToEdit = ref<Partial<Asset>>({});
@@ -47,13 +47,17 @@ const assetToDelete = ref<Asset | null>(null);
 const assetClasses = ['Stock', 'ETF', 'Real Estate', 'Cash', 'Venture Capital', 'Other'];
 const currencyOptions = ['EUR', 'CHF', 'USD', 'GBP', 'JPY', 'RMB'];
 
+// --- State for Filters ---
+const searchTerm = ref('');
+const selectedAssetClass = ref<string>('all');
+const selectedTrackingStatus = ref<'all' | 'auto' | 'manual'>('all');
+
 // --- Data Fetching ---
 async function fetchData() {
   if (!user.value?.id) return;
   isLoading.value = true;
   dataError.value = null;
   try {
-    // MODIFIED: Select the new not_found column
     const { data, error } = await supabase
         .from('assets')
         .select('*')
@@ -70,17 +74,32 @@ async function fetchData() {
   }
 }
 
-// --- Computed Property for Filtering ---
+// --- MODIFIED: Computed Property for Local Filtering ---
 const filteredAssets = computed(() => {
-  if (!searchTerm.value) {
-    return allAssets.value;
+  let assets = [...allAssets.value];
+
+  // 1. Filter by search term
+  if (searchTerm.value) {
+    const lowerCaseSearch = searchTerm.value.toLowerCase();
+    assets = assets.filter(asset =>
+        asset.name.toLowerCase().includes(lowerCaseSearch) ||
+        asset.ticker?.toLowerCase().includes(lowerCaseSearch) ||
+        asset.isin?.toLowerCase().includes(lowerCaseSearch)
+    );
   }
-  const lowerCaseSearch = searchTerm.value.toLowerCase();
-  return allAssets.value.filter(asset =>
-      asset.name.toLowerCase().includes(lowerCaseSearch) ||
-      asset.ticker?.toLowerCase().includes(lowerCaseSearch) ||
-      asset.isin?.toLowerCase().includes(lowerCaseSearch)
-  );
+
+  // 2. Filter by asset class
+  if (selectedAssetClass.value !== 'all') {
+    assets = assets.filter(asset => asset.asset_class === selectedAssetClass.value);
+  }
+
+  // 3. Filter by tracking status
+  if (selectedTrackingStatus.value !== 'all') {
+    const isAuto = selectedTrackingStatus.value === 'auto';
+    assets = assets.filter(asset => asset.auto_tracking === isAuto);
+  }
+
+  return assets;
 });
 
 // --- CRUD Handlers ---
@@ -128,8 +147,7 @@ async function saveAsset() {
     currency: assetToEdit.value.currency || 'USD',
     auto_tracking: isPublicType ? assetToEdit.value.auto_tracking ?? true : false,
     metadata: assetToEdit.value.metadata || {},
-    // MODIFIED: When a user saves, we assume they fixed the issue, so we reset the flag.
-    not_found: false,
+    not_found: false, // Always reset the 'not_found' flag on save
   };
   if (assetData.metadata.auto_tracking !== undefined) {
     delete assetData.metadata.auto_tracking;
@@ -148,8 +166,7 @@ async function saveAsset() {
     if (error) {
       toast.error("Failed to update asset: " + error.message);
     } else {
-      const index = allAssets.value.findIndex(a => a.id === data.id);
-      if (index !== -1) allAssets.value[index] = data;
+      await fetchData(); // Re-fetch all data to ensure consistency
       toast.success(`Asset "${data.name}" updated.`);
       isDialogOpen.value = false;
     }
@@ -164,8 +181,7 @@ async function saveAsset() {
     if (error) {
       toast.error("Failed to create asset: " + error.message);
     } else {
-      allAssets.value.push(data);
-      allAssets.value.sort((a, b) => a.name.localeCompare(b.name));
+      await fetchData(); // Re-fetch all data to ensure consistency
       toast.success(`Asset "${data.name}" created.`);
       isDialogOpen.value = false;
     }
@@ -236,45 +252,72 @@ onMounted(() => {
         </div>
       </header>
 
+      <!-- NEW: Filter Bar -->
+      <div class="flex flex-col md:flex-row items-center gap-4">
+        <div class="flex items-center gap-2 w-full md:w-auto">
+          <Label for="class-filter" class="text-sm">Asset Class:</Label>
+          <Select v-model="selectedAssetClass">
+            <SelectTrigger id="class-filter" class="w-full md:w-[180px]"><SelectValue placeholder="All Classes" /></SelectTrigger>
+            <SelectContent><SelectGroup>
+              <SelectItem value="all">All Classes</SelectItem>
+              <SelectItem v-for="ac in assetClasses" :key="ac" :value="ac">{{ ac }}</SelectItem>
+            </SelectGroup></SelectContent>
+          </Select>
+        </div>
+        <div class="flex items-center gap-2 w-full md:w-auto">
+          <Label for="tracking-filter" class="text-sm">Tracking:</Label>
+          <Select v-model="selectedTrackingStatus">
+            <SelectTrigger id="tracking-filter" class="w-full md:w-[120px]"><SelectValue placeholder="All" /></SelectTrigger>
+            <SelectContent><SelectGroup>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="auto">Auto</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+            </SelectGroup></SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <div v-if="isLoading" class="flex items-center justify-center py-10">
         <p>Loading assets...</p>
       </div>
       <div v-else-if="dataError" class="text-red-500">{{ dataError }}</div>
       <div v-else-if="filteredAssets.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
         <h3 class="text-xl font-semibold">No Assets Found</h3>
-        <p class="text-muted-foreground mt-2">Get started by creating your first asset.</p>
-        <Button @click="openCreateDialog" class="mt-4">Add Asset</Button>
+        <p class="text-muted-foreground mt-2">Your search or filters returned no results.</p>
       </div>
       <div v-else class="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Asset Class</TableHead>
-              <TableHead>Ticker / ISIN</TableHead>
-              <TableHead>Tracking</TableHead>
-              <TableHead class="text-right">Actions</TableHead>
+              <TableHead class="w-[180px]">Asset Class</TableHead>
+              <TableHead class="w-[200px]">Ticker / ISIN</TableHead>
+              <TableHead class="w-[120px]">Tracking</TableHead>
+              <TableHead class="w-[120px] text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <!-- MODIFIED: Added dynamic class and title for error state -->
-            <TableRow v-for="asset in filteredAssets" :key="asset.id" :class="{ 'bg-red-50 border-l-4 border-red-500': asset.not_found }" title="Auto-tracking failed for this asset. Please edit the Ticker/ISIN and save to try again.">
+            <TableRow v-for="asset in filteredAssets" :key="asset.id" :class="{ 'bg-red-50/50': asset.not_found }" :title="asset.not_found ? 'Auto-tracking failed. Please edit the Ticker/ISIN and save to try again.' : ''">
               <TableCell class="font-medium">{{ asset.name }}</TableCell>
-              <TableCell>{{ asset.asset_class }}</TableCell>
-              <TableCell class="text-muted-foreground">
+              <TableCell class="w-[180px]">{{ asset.asset_class }}</TableCell>
+              <TableCell class="w-[200px] text-muted-foreground">
                 <div v-if="asset.ticker || asset.isin">
                   <span>{{ asset.ticker }}</span>
                   <span v-if="asset.ticker && asset.isin"> / </span>
                   <span>{{ asset.isin }}</span>
                 </div>
               </TableCell>
-              <TableCell>
+              <TableCell class="w-[120px]">
                 <span v-if="asset.auto_tracking" class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">Auto</span>
                 <span v-else class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">Manual</span>
               </TableCell>
-              <TableCell class="text-right">
-                <Button variant="ghost" size="sm" @click="openEditDialog(asset)">Edit</Button>
-                <Button variant="ghost" size="sm" @click="openDeleteDialog(asset)" class="text-red-500 hover:text-red-600">Delete</Button>
+              <TableCell class="w-[120px] text-right">
+                <Button variant="ghost" size="icon" @click="openEditDialog(asset)" title="Edit Asset">
+                  <Pencil class="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" @click="openDeleteDialog(asset)" class="text-red-500 hover:text-red-600" title="Delete Asset">
+                  <Trash2 class="h-4 w-4" />
+                </Button>
               </TableCell>
             </TableRow>
           </TableBody>
@@ -287,7 +330,7 @@ onMounted(() => {
           <DialogHeader>
             <DialogTitle>{{ assetToEdit?.id ? 'Edit Asset' : 'Create New Asset' }}</DialogTitle>
           </DialogHeader>
-          <div v-if="assetToEdit" class="flex flex-col gap-4 py-4">
+          <div v-if="assetToEdit" class="flex flex-col gap-4 py-4 max-h-[70vh] overflow-y-auto px-6">
 
             <div class="space-y-2">
               <Label for="asset_class">Asset Class</Label>

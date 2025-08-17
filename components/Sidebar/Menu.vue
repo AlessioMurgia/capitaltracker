@@ -21,6 +21,11 @@
       icon: "hugeicons:transaction"
     },
     {
+      title: "Income",
+      path: "/income",
+      icon: "mdi:cash-sync"
+    },
+    {
       title: "Valuations",
       path: "/valuations",
       icon: "carbon:chart-evaluation"
