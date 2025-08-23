@@ -25,7 +25,7 @@ interface UserSettings {
 // --- Component State ---
 const portfoliosList = ref<Portfolio[]>([]);
 const settings = ref<UserSettings>({});
-const currencyOptions = ['EUR', 'CHF', 'USD', 'GBP', 'JPY', 'RMB'];
+const currencyOptions = ['EUR', 'CHF', 'USD', 'GBP'];
 
 // --- Data Fetching ---
 async function fetchData() {

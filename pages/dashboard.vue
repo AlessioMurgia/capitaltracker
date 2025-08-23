@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import AllocationDonutChart from "~/components/charts/AllocationDonutChart.vue";
 import MainLineChart from  "~/components/charts/MainLineChart.vue";
 import AllocationAreaChart from '~/components/charts/AllocationAreaChart.vue';
@@ -44,17 +44,26 @@ interface Valuation {
   value: number;
 }
 
-// NEW: Interface for conversion rates
 interface ConversionRate {
   base_currency: string;
   target_currency: string;
   rate: number;
 }
 
+// NEW: Interface for upcoming payouts
+interface Payout {
+  id: string;
+  amount: number;
+  payout_date: string;
+  description: string;
+  source_asset: { name: string } | null;
+  destination_asset: { currency: string } | null;
+}
+
 // --- State ---
 const portfoliosList = ref<{ id: string, name: string }[]>([]);
 const selectedPortfolioId = ref<string>('all');
-const userCurrency = ref<string>('EUR'); // Default currency
+const userCurrency = ref<string>('EUR');
 const conversionRates = ref<ConversionRate[]>([]);
 
 // --- Chart & KPI Data Refs ---
@@ -65,6 +74,7 @@ const geographicAllocationData = ref<AllocationDataPoint[]>([]);
 const platformAllocationData = ref<AllocationDataPoint[]>([]);
 const assetAllocationHistoryData = ref<any[]>([]);
 const recentTransactions = ref<Transaction[]>([]);
+const upcomingPayouts = ref<Payout[]>([]); // NEW: State for payouts
 
 const commonChartCategories = { value: { name: 'Value', color: '#3b82f6' } };
 const portfolioValueChartTabs = ref([
@@ -78,6 +88,20 @@ const kpiCardsData = ref([
   { id: 'totalGainLoss', title: "Total Gain/Loss", progression: 0, amount: 0, description: "Overall profit or loss since inception", }
 ]);
 
+// --- Computed Properties ---
+
+// NEW: Computed property to filter and structure visible donut charts for dynamic layout
+const visibleDonutCharts = computed(() => {
+  const charts = [
+    { title: 'Current Asset Allocation', data: currentAssetAllocationData.value },
+    { title: 'Sector Allocation', data: sectorAllocationData.value },
+    { title: 'Geographic Allocation', data: geographicAllocationData.value },
+    { title: 'Platform Allocation', data: platformAllocationData.value }
+  ];
+  return charts.filter(chart => chart.data && chart.data.length > 0);
+});
+
+
 // --- Currency Conversion Helpers ---
 const getCurrencySymbol = (currencyCode: string) => {
   const symbols: { [key: string]: string } = { 'EUR': '€', 'USD': '$', 'GBP': '£', 'CHF': 'CHF' };
@@ -89,14 +113,13 @@ const convertCurrency = (amount: number, fromCurrency: string | undefined, toCur
     return amount;
   }
   const rate = conversionRates.value.find(r => r.base_currency === fromCurrency && r.target_currency === toCurrency);
-  // If no direct rate, try inverse (e.g., if we need USD->EUR but only have EUR->USD)
   if (!rate) {
     const inverseRate = conversionRates.value.find(r => r.base_currency === toCurrency && r.target_currency === fromCurrency);
     if (inverseRate) {
       return amount / inverseRate.rate;
     }
   }
-  return rate ? amount * rate.rate : amount; // Fallback to original amount if rate not found
+  return rate ? amount * rate.rate : amount;
 };
 
 // --- Data Loading and Processing ---
@@ -120,40 +143,52 @@ async function loadAndProcessData() {
   dataError.value = null;
 
   try {
-    // Set user currency from metadata
     userCurrency.value = user.value.user_metadata?.default_currency || 'EUR';
-
-    // Fetch conversion rates along with other data
-    const { data: ratesData, error: ratesError } = await supabase.from('currency_conversions').select('*');
-    if (ratesError) throw ratesError;
-    conversionRates.value = ratesData || [];
 
     let targetPortfolioIds = selectedPortfolioId.value === 'all'
         ? portfoliosList.value.map(p => p.id)
         : [selectedPortfolioId.value];
 
     // Reset data state
-    currentAssetAllocationData.value = []; sectorAllocationData.value = []; geographicAllocationData.value = []; platformAllocationData.value = []; assetAllocationHistoryData.value = []; recentTransactions.value = []; portfolioValueChartTabs.value.forEach(tab => tab.chartData = []); kpiCardsData.value.forEach(card => { card.amount = 0; card.progression = 0; });
+    currentAssetAllocationData.value = []; sectorAllocationData.value = []; geographicAllocationData.value = []; platformAllocationData.value = []; assetAllocationHistoryData.value = []; recentTransactions.value = []; upcomingPayouts.value = []; portfolioValueChartTabs.value.forEach(tab => tab.chartData = []); kpiCardsData.value.forEach(card => { card.amount = 0; card.progression = 0; });
 
-    const { data: transactions, error: txError } = await supabase.from('transactions').select(`*, assets!inner(*)`).in('portfolio_id', targetPortfolioIds).order('transaction_date', { ascending: false });
-    if (txError) throw txError;
-    if (!transactions || transactions.length === 0) { isLoading.value = false; return; }
+    // Fetch all data in parallel
+    const today = new Date().toISOString().split('T')[0];
+    const [ratesRes, transactionsRes, valuationsRes, payoutsRes] = await Promise.all([
+      supabase.from('currency_conversions').select('*'),
+      supabase.from('transactions').select(`*, assets!inner(*)`).in('portfolio_id', targetPortfolioIds).order('transaction_date', { ascending: false }),
+      supabase.from('asset_valuations').select('*').in('asset_id', [...new Set((await supabase.from('transactions').select('asset_id').in('portfolio_id', targetPortfolioIds)).data?.map(tx => tx.asset_id) || [])]),
+      // NEW: Fetch upcoming payouts
+      supabase.from('payouts').select(`id, amount, payout_date, description, source_asset:assets!payouts_source_asset_id_fkey(name), destination_asset:assets!payouts_destination_asset_id_fkey(currency)`)
+          .in('portfolio_id', targetPortfolioIds)
+          .eq('is_paid', false)
+          .gte('payout_date', today)
+          .order('payout_date', { ascending: true })
+          .limit(5)
+    ]);
+
+    if (ratesRes.error) throw ratesRes.error;
+    if (transactionsRes.error) throw transactionsRes.error;
+    if (valuationsRes.error) throw valuationsRes.error;
+    if (payoutsRes.error) throw payoutsRes.error;
+
+    conversionRates.value = ratesRes.data || [];
+    const transactions = transactionsRes.data || [];
+    const valuations = valuationsRes.data || [];
+    upcomingPayouts.value = payoutsRes.data || [];
+
+    if (transactions.length === 0) { isLoading.value = false; return; }
 
     recentTransactions.value = transactions.slice(0, 5);
 
-    const assetIds = [...new Set(transactions.map(tx => tx.asset_id))];
-    const { data: valuations, error: valError } = await supabase.from('asset_valuations').select('*').in('asset_id', assetIds);
-    if (valError) throw valError;
-
-    // Process all data with currency conversion
     const { holdings, totalRealizedGainLoss, totalCapitalInvested } = calculateHoldings(transactions);
-    const valuationMap = createValuationMap(valuations || []);
+    const valuationMap = createValuationMap(valuations);
     const portfolioState = calculatePortfolioState(holdings, valuationMap);
 
     updateKpiCards(portfolioState, totalRealizedGainLoss, totalCapitalInvested);
     updateDonutCharts(portfolioState);
-    updateHistoricalCharts(transactions, valuations || []);
-    assetAllocationHistoryData.value = createAllocationHistoryData(transactions, valuations || []);
+    updateHistoricalCharts(transactions, valuations);
+    assetAllocationHistoryData.value = createAllocationHistoryData(transactions, valuations);
 
   } catch (error: any) {
     console.error("Error loading dashboard data:", error);
@@ -163,15 +198,13 @@ async function loadAndProcessData() {
   }
 }
 
-// --- Calculation functions now use currency conversion ---
+// --- Calculation functions (logic remains the same, just called from the main loader) ---
 
 function calculateHoldings(transactions: Transaction[]) {
-  // This function calculates values in their ORIGINAL currency. Conversion happens later.
   const holdings: Record<string, { quantity: number; costBasis: number; asset: Asset }> = {};
   let totalRealizedGainLoss = 0;
   let totalCapitalInvested = 0;
-
-  const sortedTransactions = transactions.sort((a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
+  const sortedTransactions = [...transactions].sort((a, b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
 
   for (const tx of sortedTransactions) {
     if (!holdings[tx.asset_id]) {
@@ -224,14 +257,11 @@ function calculatePortfolioState(holdings: Record<string, { quantity: number; co
 function updateKpiCards(portfolioState: ReturnType<typeof calculatePortfolioState>, totalRealizedGainLoss: number, totalCapitalInvested: number) {
   let totalValue = 0;
   let totalUnrealizedGainLoss = 0;
-
   portfolioState.forEach(h => {
     totalValue += convertCurrency(h.currentValue, h.asset.currency, userCurrency.value);
     totalUnrealizedGainLoss += convertCurrency(h.unrealizedGainLoss, h.asset.currency, userCurrency.value);
   });
-
   const totalGainLoss = totalUnrealizedGainLoss + totalRealizedGainLoss;
-
   kpiCardsData.value[0].amount = totalValue;
   kpiCardsData.value[1].amount = totalGainLoss;
   kpiCardsData.value[1].progression = totalCapitalInvested !== 0 ? (totalGainLoss / totalCapitalInvested) * 100 : 0;
@@ -256,10 +286,8 @@ function updateDonutCharts(portfolioState: ReturnType<typeof calculatePortfolioS
 }
 
 function updateHistoricalCharts(transactions: Transaction[], valuations: Valuation[]) {
-  // This function now converts values at each point in time
   const history: { date: string, value: number }[] = [];
   if (transactions.length === 0) return;
-
   const allDates = [...new Set([...transactions.map(tx => tx.transaction_date.split('T')[0]), ...valuations.map(v => v.date)])].sort();
   const assetDetailsMap = new Map(transactions.map(tx => [tx.asset_id, tx.assets]));
 
@@ -268,7 +296,6 @@ function updateHistoricalCharts(transactions: Transaction[], valuations: Valuati
     const holdingsOnDate: Record<string, number> = {};
     transactions.filter(tx => tx.transaction_date.split('T')[0] <= date)
         .forEach(tx => holdingsOnDate[tx.asset_id] = (holdingsOnDate[tx.asset_id] || 0) + (tx.type === 'BUY' ? tx.quantity : -tx.quantity));
-
     Object.entries(holdingsOnDate).forEach(([assetId, quantity]) => {
       if (quantity > 0) {
         const asset = assetDetailsMap.get(assetId);
@@ -280,30 +307,25 @@ function updateHistoricalCharts(transactions: Transaction[], valuations: Valuati
     });
     history.push({ date, value: portfolioValueOnDate });
   });
-  // ... rest of the function for processing tabs remains the same
   const today = new Date();
   const todayString = today.toISOString().split('T')[0];
   const lastHistoryPoint = history[history.length - 1];
   if (lastHistoryPoint && lastHistoryPoint.date < todayString) {
     history.push({ date: todayString, value: lastHistoryPoint.value });
   }
-
   const oneMonthAgo = new Date(new Date().setDate(today.getDate() - 30));
   const oneYearAgo = new Date(new Date().setFullYear(today.getFullYear() - 1));
-
   portfolioValueChartTabs.value[0].chartData = history.filter(p => new Date(p.date) >= oneMonthAgo);
   portfolioValueChartTabs.value[1].chartData = history.filter(p => new Date(p.date) >= oneYearAgo);
   portfolioValueChartTabs.value[2].chartData = history;
 }
 
 function createAllocationHistoryData(transactions: Transaction[], valuations: Valuation[]) {
-  // This function also converts values at each point in time
   if (!transactions.length) return [];
   const history: Record<string, any>[] = [];
   const assetDetailsMap = new Map(transactions.map(tx => [tx.asset_id, tx.assets]));
   const assetClasses = [...new Set(Array.from(assetDetailsMap.values()).map(a => a.asset_class))];
   const allDates = [...new Set([...transactions.map(tx => tx.transaction_date.split('T')[0]), ...valuations.map(v => v.date)])].sort();
-
   for (const date of allDates) {
     const compositionOnDate: Record<string, any> = { time: date };
     assetClasses.forEach(ac => compositionOnDate[ac] = 0);
@@ -323,7 +345,6 @@ function createAllocationHistoryData(transactions: Transaction[], valuations: Va
     }
     history.push(compositionOnDate);
   }
-  // ... rest of the function remains the same
   return history;
 }
 
@@ -396,25 +417,14 @@ watch(selectedPortfolioId, () => {
         </Tabs>
       </div>
 
-      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <h2 class="text-xl font-semibold mb-2">Current Asset Allocation</h2>
-          <ClientOnly><AllocationDonutChart v-if="currentAssetAllocationData.length > 0" :allocation-data="currentAssetAllocationData" /><div v-else class="flex items-center justify-center min-h-[350px]"><p>No allocation data.</p></div></ClientOnly>
-        </div>
-        <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <h2 class="text-xl font-semibold mb-2">Sector Allocation</h2>
-          <ClientOnly><AllocationDonutChart v-if="sectorAllocationData.length > 0" :allocation-data="sectorAllocationData" /><div v-else class="flex items-center justify-center min-h-[350px]"><p>No sector data.</p></div></ClientOnly>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <h2 class="text-xl font-semibold mb-2">Geographic Allocation</h2>
-          <ClientOnly><AllocationDonutChart v-if="geographicAllocationData.length > 0" :allocation-data="geographicAllocationData" /><div v-else class="flex items-center justify-center min-h-[350px]"><p>No geographic data.</p></div></ClientOnly>
-        </div>
-        <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <h2 class="text-xl font-semibold mb-2">Platform Allocation</h2>
-          <ClientOnly><AllocationDonutChart v-if="platformAllocationData.length > 0" :allocation-data="platformAllocationData" /><div v-else class="flex items-center justify-center min-h-[350px]"><p>No platform data.</p></div></ClientOnly>
+      <!-- MODIFIED: Dynamic grid for donut charts -->
+      <div v-if="visibleDonutCharts.length > 0" class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div v-for="chart in visibleDonutCharts" :key="chart.title" class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
+          <h2 class="text-xl font-semibold mb-2">{{ chart.title }}</h2>
+          <ClientOnly>
+            <AllocationDonutChart :allocation-data="chart.data" />
+            <template #fallback><div class="flex items-center justify-center min-h-[350px]"><p>Loading chart...</p></div></template>
+          </ClientOnly>
         </div>
       </div>
 
@@ -444,9 +454,28 @@ watch(selectedPortfolioId, () => {
           </div>
         </div>
       </div>
+      <!-- MODIFIED: Payouts section now shows dynamic data -->
       <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <h2 class="text-xl font-semibold mb-2">Next Dividends/Payouts</h2>
-        <div class="h-[250px] flex flex-col items-center justify-center text-muted-foreground bg-neutral-50 dark:bg-neutral-800 rounded"><p>[Next Dividends/Payouts Placeholder]</p></div>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xl font-semibold">Next Dividends/Payouts</h2>
+          <a href="/income" class="text-sm text-blue-500 hover:underline">View All</a>
+        </div>
+        <div class="space-y-4">
+          <div v-if="upcomingPayouts.length === 0" class="text-center py-10 text-muted-foreground">
+            <p>No upcoming payouts found.</p>
+          </div>
+          <div v-for="payout in upcomingPayouts" :key="payout.id" class="flex items-center">
+            <div class="ml-4 space-y-1">
+              <p class="text-sm font-medium leading-none">{{ payout.source_asset?.name || payout.description }}</p>
+              <p class="text-sm text-muted-foreground">
+                Expected on {{ new Date(payout.payout_date).toLocaleDateString() }}
+              </p>
+            </div>
+            <div class="ml-auto font-medium text-right text-green-600">
+              +{{ getCurrencySymbol(userCurrency) }}{{ convertCurrency(payout.amount, payout.destination_asset?.currency, userCurrency).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}
+            </div>
+          </div>
+        </div>
       </div>
     </footer>
   </div>

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Toaster, toast } from 'vue-sonner'; // Import Toaster and toast
+import { Toaster, toast } from 'vue-sonner';
 import 'vue-sonner/style.css'
 
 // --- Supabase & Data Loading ---
@@ -27,6 +27,7 @@ interface Portfolio {
 interface Asset {
   id: string;
   asset_class: string;
+  currency: string;
 }
 
 interface Transaction {
@@ -44,6 +45,12 @@ interface Valuation {
   value: number;
 }
 
+interface ConversionRate {
+  base_currency: string;
+  target_currency: string;
+  rate: number;
+}
+
 // --- Component State ---
 const portfolios = ref<Portfolio[]>([]);
 const portfolioTotals = ref<Record<string, number>>({});
@@ -51,49 +58,74 @@ const isDialogOpen = ref(false);
 const isDeleteDialogOpen = ref(false);
 const portfolioToEdit = ref<Partial<Portfolio> | null>(null);
 const portfolioToDelete = ref<Portfolio | null>(null);
+const userCurrency = ref<string>('EUR');
+const conversionRates = ref<ConversionRate[]>([]);
 
-// --- Data Fetching and Calculation (No RPC) ---
+// --- Currency Conversion Helpers ---
+const getCurrencySymbol = (currencyCode: string) => {
+  const symbols: { [key: string]: string } = { 'EUR': '€', 'USD': '$', 'GBP': '£', 'CHF': 'CHF' };
+  return symbols[currencyCode] || currencyCode;
+};
+
+const convertCurrency = (amount: number, fromCurrency: string | undefined, toCurrency: string) => {
+  if (!fromCurrency || fromCurrency === toCurrency) {
+    return amount;
+  }
+  const rate = conversionRates.value.find(r => r.base_currency === fromCurrency && r.target_currency === toCurrency);
+  if (!rate) {
+    const inverseRate = conversionRates.value.find(r => r.base_currency === toCurrency && r.target_currency === fromCurrency);
+    if (inverseRate) {
+      return amount / inverseRate.rate;
+    }
+  }
+  return rate ? amount * rate.rate : amount;
+};
+
+
+// --- Data Fetching and Calculation ---
 async function fetchData() {
   if (!user.value?.id) return;
   isLoading.value = true;
   dataError.value = null;
   try {
-    // Fetch all portfolios for the user
-    const { data: portfoliosData, error: portfoliosError } = await supabase
-        .from('portfolios')
-        .select('*')
-        .eq('user_id', user.value.id)
-        .order('created_at', { ascending: true });
+    // Set user currency from metadata, default to EUR
+    userCurrency.value = user.value.user_metadata?.default_currency || 'EUR';
 
-    if (portfoliosError) throw portfoliosError;
-    portfolios.value = portfoliosData || [];
+    // Step 1: Fetch portfolios and conversion rates
+    const [portfoliosRes, ratesRes] = await Promise.all([
+      supabase.from('portfolios').select('*').eq('user_id', user.value.id).order('created_at', { ascending: true }),
+      supabase.from('currency_conversions').select('*')
+    ]);
 
-    const portfolioIds = portfolios.value.map(p => p.id);
-    if (portfolioIds.length === 0) {
+    if (portfoliosRes.error) throw portfoliosRes.error;
+    if (ratesRes.error) throw ratesRes.error;
+
+    portfolios.value = portfoliosRes.data || [];
+    conversionRates.value = ratesRes.data || [];
+
+    if (portfolios.value.length === 0) {
       isLoading.value = false;
       return;
     }
 
-    // Fetch all transactions for those portfolios
+    // Step 2: Use portfolio IDs to fetch associated transactions
+    const portfolioIds = portfolios.value.map(p => p.id);
     const { data: transactions, error: transactionsError } = await supabase
         .from('transactions')
-        .select(`portfolio_id, asset_id, type, quantity, assets!inner(id, asset_class)`)
-        .in('portfolio_id', portfolioIds);
+        .select(`portfolio_id, asset_id, type, quantity, assets!inner(id, asset_class, currency)`)
+        .in('portfolio_id', portfolioIds); // CORRECTED: Filter by portfolio_id
 
     if (transactionsError) throw transactionsError;
 
-    // If there are transactions, fetch all their valuations
+    // If there are transactions, fetch their valuations and calculate totals
     if (transactions && transactions.length > 0) {
       const assetIds = [...new Set(transactions.map(tx => tx.asset_id))];
-
       const { data: valuations, error: valError } = await supabase
           .from('asset_valuations')
           .select('asset_id, date, value')
           .in('asset_id', assetIds);
-
       if (valError) throw valError;
 
-      // Process the valuations on the client-side to find the latest for each asset
       const latestValuationMap = (valuations || []).reduce((acc, val) => {
         if (!acc[val.asset_id] || new Date(val.date) > new Date(acc[val.asset_id].date)) {
           acc[val.asset_id] = val;
@@ -106,6 +138,11 @@ async function fetchData() {
       );
 
       calculatePortfolioValues(transactions as Transaction[], latestValueMap);
+    } else {
+      // If there are no transactions, initialize all portfolio totals to 0
+      const totals: Record<string, number> = {};
+      portfolios.value.forEach(p => totals[p.id] = 0);
+      portfolioTotals.value = totals;
     }
 
   } catch (error: any) {
@@ -133,9 +170,11 @@ function calculatePortfolioValues(transactions: Transaction[], valuationMap: Rec
   Object.values(holdings).forEach(holding => {
     if(holding.quantity > 0) {
       const latestValue = valuationMap[holding.asset.id] || 0;
-      const assetValue = holding.asset.asset_class === 'Cash' ? latestValue : holding.quantity * latestValue;
+      const assetValueInNativeCurrency = holding.asset.asset_class === 'Cash' ? holding.quantity : holding.quantity * latestValue;
+      const convertedValue = convertCurrency(assetValueInNativeCurrency, holding.asset.currency, userCurrency.value);
+
       if (totals[holding.portfolio_id] !== undefined) {
-        totals[holding.portfolio_id] += assetValue;
+        totals[holding.portfolio_id] += convertedValue;
       }
     }
   });
@@ -144,8 +183,7 @@ function calculatePortfolioValues(transactions: Transaction[], valuationMap: Rec
 }
 
 
-// --- CRUD Handlers with Optimistic UI ---
-
+// --- CRUD Handlers (Unchanged) ---
 function openCreateDialog() {
   portfolioToEdit.value = { name: '', description: '' };
   isDialogOpen.value = true;
@@ -161,45 +199,26 @@ async function savePortfolio() {
     toast.error("Portfolio name is required.");
     return;
   }
-
   const portfolioData = {
     user_id: user.value!.id,
     name: portfolioToEdit.value.name,
     description: portfolioToEdit.value.description,
   };
-
   if (portfolioToEdit.value.id) {
-    // --- UPDATE ---
-    const { data, error } = await supabase
-        .from('portfolios')
-        .update(portfolioData)
-        .eq('id', portfolioToEdit.value.id)
-        .select()
-        .single();
-
+    const { data, error } = await supabase.from('portfolios').update(portfolioData).eq('id', portfolioToEdit.value.id).select().single();
     if (error) {
       toast.error("Failed to update portfolio: " + error.message);
     } else {
-      // Optimistic UI: Update local state directly
       const index = portfolios.value.findIndex(p => p.id === data.id);
-      if (index !== -1) {
-        portfolios.value[index] = data;
-      }
+      if (index !== -1) portfolios.value[index] = data;
       toast.success(`Portfolio "${data.name}" updated.`);
       isDialogOpen.value = false;
     }
   } else {
-    // --- CREATE ---
-    const { data, error } = await supabase
-        .from('portfolios')
-        .insert(portfolioData)
-        .select()
-        .single();
-
+    const { data, error } = await supabase.from('portfolios').insert(portfolioData).select().single();
     if (error) {
       toast.error("Failed to create portfolio: " + error.message);
     } else {
-      // Optimistic UI: Add to local state directly
       portfolios.value.push(data);
       toast.success(`Portfolio "${data.name}" created.`);
       isDialogOpen.value = false;
@@ -214,21 +233,15 @@ function openDeleteDialog(portfolio: Portfolio) {
 
 async function confirmDelete() {
   if (!portfolioToDelete.value) return;
-
-  // First, delete related transactions to avoid foreign key constraints
   const { error: txError } = await supabase.from('transactions').delete().eq('portfolio_id', portfolioToDelete.value.id);
   if (txError) {
     toast.error("Failed to delete transactions: " + txError.message);
     return;
   }
-
-  // Then, delete the portfolio itself
   const { error } = await supabase.from('portfolios').delete().eq('id', portfolioToDelete.value.id);
-
   if (error) {
     toast.error("Failed to delete portfolio: " + error.message);
   } else {
-    // Optimistic UI: Remove from local state directly
     const deletedName = portfolioToDelete.value.name;
     portfolios.value = portfolios.value.filter(p => p.id !== portfolioToDelete.value!.id);
     toast.success(`Portfolio "${deletedName}" has been deleted.`);
@@ -252,20 +265,17 @@ onMounted(() => {
 
 <template>
   <div>
-    <!-- The Toaster component is what renders the toast messages -->
     <Toaster richColors position="top-right" />
     <div class="grid w-full gap-6 p-4 md:p-6">
       <header class="flex items-center justify-between">
         <div class="grow">
           <h1 class="text-2xl font-semibold md:text-3xl">My Portfolios</h1>
-          <p class="text-muted-foreground">Manage your investment portfolios.</p>
+          <p class="text-muted-foreground">Manage your investment portfolios. Values are shown in <strong>{{ userCurrency }}</strong>.</p>
         </div>
         <Button @click="openCreateDialog">Create New Portfolio</Button>
       </header>
 
-      <div v-if="isLoading" class="flex items-center justify-center py-10">
-        <p>Loading portfolios...</p>
-      </div>
+      <div v-if="isLoading" class="flex items-center justify-center py-10"><p>Loading portfolios...</p></div>
       <div v-else-if="dataError" class="text-red-500">{{ dataError }}</div>
       <div v-else-if="portfolios.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
         <h3 class="text-xl font-semibold">No Portfolios Found</h3>
@@ -280,7 +290,7 @@ onMounted(() => {
           </CardHeader>
           <CardContent>
             <p class="text-2xl font-bold">
-              €{{ (portfolioTotals[portfolio.id] || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+              {{ getCurrencySymbol(userCurrency) }}{{ (portfolioTotals[portfolio.id] || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
             </p>
             <p class="text-xs text-muted-foreground">Current Total Value</p>
           </CardContent>
@@ -311,9 +321,7 @@ onMounted(() => {
             </div>
           </div>
           <DialogFooter>
-            <DialogClose as-child>
-              <Button type="button" variant="secondary">Cancel</Button>
-            </DialogClose>
+            <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
             <Button @click="savePortfolio">Save Portfolio</Button>
           </DialogFooter>
         </DialogContent>
