@@ -4,14 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Toaster, toast } from 'vue-sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-// MODIFIED: Imported new icon
-import { Pencil, AlertTriangle } from 'lucide-vue-next';
+// MODIFIED: Imported new icons for edit and delete actions
+import { Pencil, AlertTriangle, Trash2 } from 'lucide-vue-next';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
@@ -34,7 +34,7 @@ interface Portfolio {
 interface Payout {
   id: number;
   source_asset_id: string | null;
-  destination_asset_id: string | null; // Can be null now
+  destination_asset_id: string | null;
   portfolio_id: string;
   amount: number;
   payout_date: string;
@@ -45,7 +45,7 @@ interface Payout {
   description: string;
   source_type: 'API' | 'MANUAL';
   source_asset: { name: string } | null;
-  destination_asset: { name: string } | null; // Can be null now
+  destination_asset: { name: string } | null;
 }
 
 // --- Component State ---
@@ -54,8 +54,10 @@ const portfoliosList = ref<Portfolio[]>([]);
 const assetsList = ref<Asset[]>([]);
 const isAddDialogOpen = ref(false);
 const isAssignDialogOpen = ref(false);
+const isDeleteDialogOpen = ref(false); // New state for delete confirmation
 const payoutToEdit = ref<Partial<Payout>>({});
 const payoutToAssign = ref<Partial<Payout>>({});
+const payoutToDelete = ref<Payout | null>(null); // New state to hold payout for deletion
 const frequencyOptions = ['daily', 'weekly', 'monthly', 'yearly'];
 
 // --- Filters ---
@@ -75,6 +77,9 @@ const paidPayouts = computed(() => {
       .sort((a, b) => new Date(b.payout_date).getTime() - new Date(a.payout_date).getTime());
 });
 const cashAssets = computed(() => assetsList.value.filter(a => a.asset_class === 'Cash'));
+// MODIFIED: Dynamic dialog title
+const dialogTitle = computed(() => payoutToEdit.value.id ? 'Edit Income' : 'Add Manual Income');
+
 
 // --- Data Fetching ---
 async function fetchData() {
@@ -124,11 +129,27 @@ async function openCreateDialog() {
   isAddDialogOpen.value = true;
 }
 
+// MODIFIED: New function to open dialog for editing
+async function openEditDialog(payout: Payout) {
+  await fetchDropdownData();
+  // Use a deep copy to prevent reactive changes before saving
+  payoutToEdit.value = JSON.parse(JSON.stringify(payout));
+  isAddDialogOpen.value = true;
+}
+
+// MODIFIED: New function to open delete confirmation
+function openDeleteDialog(payout: Payout) {
+  payoutToDelete.value = payout;
+  isDeleteDialogOpen.value = true;
+}
+
+
 async function openAssignDialog(payout: Payout) {
   payoutToAssign.value = { ...payout };
   isAssignDialogOpen.value = true;
 }
 
+// MODIFIED: Function now handles both creating and updating
 async function savePayout() {
   if (!user.value || !payoutToEdit.value.destination_asset_id || !payoutToEdit.value.portfolio_id || !payoutToEdit.value.amount || !payoutToEdit.value.payout_date) {
     toast.error("Please fill all required fields.");
@@ -150,15 +171,46 @@ async function savePayout() {
     description: payoutToEdit.value.description,
   };
 
-  const { data, error } = await supabase.from('payouts').insert(payoutData).select().single();
+  let error;
+  if (payoutToEdit.value.id) {
+    // This is an update
+    const { error: updateError } = await supabase.from('payouts').update(payoutData).eq('id', payoutToEdit.value.id);
+    error = updateError;
+  } else {
+    // This is an insert
+    const { error: insertError } = await supabase.from('payouts').insert(payoutData);
+    error = insertError;
+  }
+
+
   if (error) {
     toast.error("Failed to save payout: " + error.message);
   } else {
     await fetchData();
-    toast.success("Payout saved successfully.");
+    toast.success(`Payout ${payoutToEdit.value.id ? 'updated' : 'saved'} successfully.`);
     isAddDialogOpen.value = false;
   }
 }
+
+// MODIFIED: New function to handle deletion
+async function deletePayout() {
+  if (!payoutToDelete.value) return;
+
+  const { error } = await supabase
+      .from('payouts')
+      .delete()
+      .eq('id', payoutToDelete.value.id);
+
+  if (error) {
+    toast.error("Failed to delete payout: " + error.message);
+  } else {
+    await fetchData();
+    toast.success("Payout deleted successfully.");
+  }
+  isDeleteDialogOpen.value = false;
+  payoutToDelete.value = null;
+}
+
 
 async function saveDestination() {
   if (!payoutToAssign.value || !payoutToAssign.value.destination_asset_id) {
@@ -236,21 +288,31 @@ onMounted(() => {
                   <TableHead>Source</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead class="text-right">Amount</TableHead>
-                  <TableHead class="w-[100px] text-center">Actions</TableHead>
+                  <TableHead class="w-[150px] text-center">Actions</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   <TableRow v-if="upcomingPayouts.length === 0"><TableCell colspan="5" class="text-center text-muted-foreground">No upcoming payouts.</TableCell></TableRow>
-                  <!-- MODIFIED: Added conditional title and alert icon -->
                   <TableRow v-for="payout in upcomingPayouts" :key="payout.id" :class="{ 'bg-red-50/50 border-l-4 border-red-500': !payout.destination_asset_id }" :title="!payout.destination_asset_id ? 'Cash account needed to transfer transaction' : ''">
                     <TableCell>{{ new Date(payout.payout_date).toLocaleDateString() }}</TableCell>
                     <TableCell>{{ payout.source_asset?.name || 'Manual Income' }}</TableCell>
                     <TableCell>{{ payout.description }}</TableCell>
                     <TableCell class="text-right font-semibold text-green-600">+€{{ payout.amount.toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
                     <TableCell class="text-center">
-                      <Button v-if="!payout.destination_asset_id" @click="openAssignDialog(payout)" size="sm" variant="outline" class="h-8">
-                        <AlertTriangle class="h-4 w-4 mr-2 text-red-500" />
-                        Assign
-                      </Button>
+                      <!-- MODIFIED: Added action buttons -->
+                      <div class="flex items-center justify-center gap-2">
+                        <Button v-if="!payout.destination_asset_id" @click="openAssignDialog(payout)" size="sm" variant="outline" class="h-8">
+                          <AlertTriangle class="h-4 w-4 mr-2 text-red-500" />
+                          Assign
+                        </Button>
+                        <template v-if="payout.source_type === 'MANUAL'">
+                          <Button @click="openEditDialog(payout)" size="icon" variant="ghost" class="h-8 w-8">
+                            <Pencil class="h-4 w-4" />
+                          </Button>
+                          <Button @click="openDeleteDialog(payout)" size="icon" variant="ghost" class="h-8 w-8 text-red-500 hover:text-red-600">
+                            <Trash2 class="h-4 w-4" />
+                          </Button>
+                        </template>
+                      </div>
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -263,19 +325,32 @@ onMounted(() => {
             <CardHeader><CardTitle>Paid Payouts</CardTitle></CardHeader>
             <CardContent>
               <Table>
+                <!-- MODIFIED: Added Actions column -->
                 <TableHeader><TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead class="text-right">Amount</TableHead>
+                  <TableHead class="w-[100px] text-center">Actions</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  <TableRow v-if="paidPayouts.length === 0"><TableCell colspan="4" class="text-center text-muted-foreground">No paid payouts found.</TableCell></TableRow>
+                  <TableRow v-if="paidPayouts.length === 0"><TableCell colspan="5" class="text-center text-muted-foreground">No paid payouts found.</TableCell></TableRow>
                   <TableRow v-for="payout in paidPayouts" :key="payout.id">
                     <TableCell>{{ new Date(payout.payout_date).toLocaleDateString() }}</TableCell>
                     <TableCell>{{ payout.source_asset?.name || 'Manual Income' }}</TableCell>
                     <TableCell>{{ payout.description }}</TableCell>
                     <TableCell class="text-right font-medium">€{{ payout.amount.toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
+                    <!-- MODIFIED: Added action buttons -->
+                    <TableCell class="text-center">
+                      <div v-if="payout.source_type === 'MANUAL'" class="flex items-center justify-center gap-2">
+                        <Button @click="openEditDialog(payout)" size="icon" variant="ghost" class="h-8 w-8">
+                          <Pencil class="h-4 w-4" />
+                        </Button>
+                        <Button @click="openDeleteDialog(payout)" size="icon" variant="ghost" class="h-8 w-8 text-red-500 hover:text-red-600">
+                          <Trash2 class="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -284,10 +359,11 @@ onMounted(() => {
         </TabsContent>
       </Tabs>
 
-      <!-- Add Manual Income Dialog -->
+      <!-- Add / Edit Manual Income Dialog -->
       <Dialog :open="isAddDialogOpen" @update:open="isAddDialogOpen = $event">
         <DialogContent class="sm:max-w-md">
-          <DialogHeader><DialogTitle>Add Manual Income</DialogTitle></DialogHeader>
+          <!-- MODIFIED: Title is now dynamic -->
+          <DialogHeader><DialogTitle>{{ dialogTitle }}</DialogTitle></DialogHeader>
           <div class="grid gap-4 py-4 max-h-[70vh] overflow-y-auto px-6">
             <div class="space-y-2">
               <Label>Description</Label>
@@ -383,6 +459,28 @@ onMounted(() => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <!-- MODIFIED: New Delete Confirmation Dialog -->
+      <Dialog :open="isDeleteDialogOpen" @update:open="isDeleteDialogOpen = $event">
+        <DialogContent class="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Deletion</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this income entry? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div v-if="payoutToDelete" class="py-4 text-sm text-muted-foreground">
+            <p><strong>Description:</strong> {{ payoutToDelete.description }}</p>
+            <p><strong>Amount:</strong> €{{ payoutToDelete.amount.toLocaleString('it-IT') }}</p>
+            <p><strong>Date:</strong> {{ new Date(payoutToDelete.payout_date).toLocaleDateString() }}</p>
+          </div>
+          <DialogFooter>
+            <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
+            <Button @click="deletePayout" variant="destructive">Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   </div>
 </template>
