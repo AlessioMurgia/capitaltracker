@@ -9,6 +9,9 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Toaster, toast } from 'vue-sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+// MODIFIED: Imported new icon
+import { Pencil, AlertTriangle } from 'lucide-vue-next';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient();
@@ -31,7 +34,7 @@ interface Portfolio {
 interface Payout {
   id: number;
   source_asset_id: string | null;
-  destination_asset_id: string;
+  destination_asset_id: string | null; // Can be null now
   portfolio_id: string;
   amount: number;
   payout_date: string;
@@ -42,15 +45,17 @@ interface Payout {
   description: string;
   source_type: 'API' | 'MANUAL';
   source_asset: { name: string } | null;
-  destination_asset: { name: string };
+  destination_asset: { name: string } | null; // Can be null now
 }
 
 // --- Component State ---
 const allPayouts = ref<Payout[]>([]);
 const portfoliosList = ref<Portfolio[]>([]);
 const assetsList = ref<Asset[]>([]);
-const isDialogOpen = ref(false);
+const isAddDialogOpen = ref(false);
+const isAssignDialogOpen = ref(false);
 const payoutToEdit = ref<Partial<Payout>>({});
+const payoutToAssign = ref<Partial<Payout>>({});
 const frequencyOptions = ['daily', 'weekly', 'monthly', 'yearly'];
 
 // --- Filters ---
@@ -116,7 +121,12 @@ async function openCreateDialog() {
     source_type: 'MANUAL',
     description: ''
   };
-  isDialogOpen.value = true;
+  isAddDialogOpen.value = true;
+}
+
+async function openAssignDialog(payout: Payout) {
+  payoutToAssign.value = { ...payout };
+  isAssignDialogOpen.value = true;
 }
 
 async function savePayout() {
@@ -127,9 +137,17 @@ async function savePayout() {
 
   const payoutData = {
     user_id: user.value.id,
-    ...payoutToEdit.value,
+    source_asset_id: payoutToEdit.value.source_asset_id,
+    destination_asset_id: payoutToEdit.value.destination_asset_id,
+    portfolio_id: payoutToEdit.value.portfolio_id,
+    amount: payoutToEdit.value.amount,
+    payout_date: payoutToEdit.value.payout_date,
+    is_paid: payoutToEdit.value.is_paid,
+    is_recurring: payoutToEdit.value.is_recurring,
     recurring_frequency: payoutToEdit.value.is_recurring ? payoutToEdit.value.recurring_frequency : null,
     recurring_end_date: payoutToEdit.value.is_recurring ? payoutToEdit.value.recurring_end_date : null,
+    source_type: 'MANUAL',
+    description: payoutToEdit.value.description,
   };
 
   const { data, error } = await supabase.from('payouts').insert(payoutData).select().single();
@@ -138,7 +156,29 @@ async function savePayout() {
   } else {
     await fetchData();
     toast.success("Payout saved successfully.");
-    isDialogOpen.value = false;
+    isAddDialogOpen.value = false;
+  }
+}
+
+async function saveDestination() {
+  if (!payoutToAssign.value || !payoutToAssign.value.destination_asset_id) {
+    toast.error("Please select a destination cash account.");
+    return;
+  }
+
+  const { data, error } = await supabase
+      .from('payouts')
+      .update({ destination_asset_id: payoutToAssign.value.destination_asset_id })
+      .eq('id', payoutToAssign.value.id)
+      .select()
+      .single();
+
+  if (error) {
+    toast.error("Failed to assign destination: " + error.message);
+  } else {
+    await fetchData();
+    toast.success("Payout destination assigned successfully.");
+    isAssignDialogOpen.value = false;
   }
 }
 
@@ -196,14 +236,22 @@ onMounted(() => {
                   <TableHead>Source</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead class="text-right">Amount</TableHead>
+                  <TableHead class="w-[100px] text-center">Actions</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  <TableRow v-if="upcomingPayouts.length === 0"><TableCell colspan="4" class="text-center text-muted-foreground">No upcoming payouts.</TableCell></TableRow>
-                  <TableRow v-for="payout in upcomingPayouts" :key="payout.id">
+                  <TableRow v-if="upcomingPayouts.length === 0"><TableCell colspan="5" class="text-center text-muted-foreground">No upcoming payouts.</TableCell></TableRow>
+                  <!-- MODIFIED: Added conditional title and alert icon -->
+                  <TableRow v-for="payout in upcomingPayouts" :key="payout.id" :class="{ 'bg-red-50/50 border-l-4 border-red-500': !payout.destination_asset_id }" :title="!payout.destination_asset_id ? 'Cash account needed to transfer transaction' : ''">
                     <TableCell>{{ new Date(payout.payout_date).toLocaleDateString() }}</TableCell>
                     <TableCell>{{ payout.source_asset?.name || 'Manual Income' }}</TableCell>
                     <TableCell>{{ payout.description }}</TableCell>
                     <TableCell class="text-right font-semibold text-green-600">+€{{ payout.amount.toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
+                    <TableCell class="text-center">
+                      <Button v-if="!payout.destination_asset_id" @click="openAssignDialog(payout)" size="sm" variant="outline" class="h-8">
+                        <AlertTriangle class="h-4 w-4 mr-2 text-red-500" />
+                        Assign
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -236,8 +284,8 @@ onMounted(() => {
         </TabsContent>
       </Tabs>
 
-      <!-- Add/Edit Dialog -->
-      <Dialog :open="isDialogOpen" @update:open="isDialogOpen = $event">
+      <!-- Add Manual Income Dialog -->
+      <Dialog :open="isAddDialogOpen" @update:open="isAddDialogOpen = $event">
         <DialogContent class="sm:max-w-md">
           <DialogHeader><DialogTitle>Add Manual Income</DialogTitle></DialogHeader>
           <div class="grid gap-4 py-4 max-h-[70vh] overflow-y-auto px-6">
@@ -283,7 +331,6 @@ onMounted(() => {
               </Select>
             </div>
             <div class="flex items-center space-x-2 pt-4 border-t mt-2">
-              <!-- THE FIX: Using the correct, robust binding pattern -->
               <Switch
                   id="is-recurring"
                   :model-value="payoutToEdit.is_recurring"
@@ -310,6 +357,29 @@ onMounted(() => {
           <DialogFooter>
             <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
             <Button @click="savePayout">Save Income</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <!-- Assign Destination Dialog -->
+      <Dialog :open="isAssignDialogOpen" @update:open="isAssignDialogOpen = $event">
+        <DialogContent class="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Destination</DialogTitle>
+            <DialogDescription>Select a cash account to deposit this income into.</DialogDescription>
+          </DialogHeader>
+          <div class="py-4 space-y-2">
+            <Label>Deposit to (Cash Account)</Label>
+            <Select v-model="payoutToAssign.destination_asset_id">
+              <SelectTrigger><SelectValue placeholder="Select destination account" /></SelectTrigger>
+              <SelectContent><SelectGroup>
+                <SelectItem v-for="a in cashAssets" :key="a.id" :value="a.id">{{ a.name }}</SelectItem>
+              </SelectGroup></SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
+            <Button @click="saveDestination">Assign Destination</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick } from 'vue';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Toaster, toast } from 'vue-sonner';
 import AllocationDonutChart from '~/components/charts/AllocationDonutChart.vue';
 import MainLineChart from '~/components/charts/MainLineChart.vue';
@@ -12,9 +12,11 @@ import AllocationAreaChart from '~/components/charts/AllocationAreaChart.vue';
 const supabase = useSupabaseClient();
 const user = useSupabaseUser();
 const isLoading = ref(true);
-const isPreparing = ref(false);
-const isDownloading = ref(false);
-const isGeneratingCsv = ref(false);
+const isPreparing = ref(false); // For PDF Summary
+const isDownloading = ref(false); // For PDF Summary
+const isGeneratingCsv = ref(false); // For CSV Transaction Export
+const isGeneratingPdf = ref(false); // For PDF Transaction Export
+
 // --- Interfaces ---
 interface Asset {
   id: string;
@@ -56,9 +58,9 @@ interface Portfolio {
 const portfoliosList = ref<Portfolio[]>([]);
 const selectedPortfolioIdCsv = ref<string>('all');
 const selectedPortfolioIdPdf = ref<string>('all');
-const isPdfReady = ref(false); // New state to control the two-step process
+const isPdfReady = ref(false); // State for the summary report two-step process
 
-// --- State for PDF Generation ---
+// --- State for PDF Summary Generation ---
 const pdfData = ref({
   kpis: [] as any[],
   assets: [] as any[],
@@ -87,9 +89,9 @@ async function fetchPortfolios() {
 }
 
 // --- Export Logic ---
-async function exportTransactions() {
+async function exportTransactionsCsv() {
   if (!user.value) return;
-  toast.info("Preparing your data for export...");
+  toast.info("Preparing your data for CSV export...");
   isGeneratingCsv.value = true;
 
   try {
@@ -137,7 +139,7 @@ async function exportTransactions() {
     link.click();
     document.body.removeChild(link);
 
-    toast.success("Your transaction data has been exported.");
+    toast.success("Your transaction data has been exported as CSV.");
 
   } catch (error: any) {
     toast.error("Failed to export data: " + error.message);
@@ -146,7 +148,81 @@ async function exportTransactions() {
   }
 }
 
-// --- MODIFIED: Two-Step PDF Generation ---
+async function exportTransactionsPdf() {
+  if (!user.value) return;
+  toast.info("Generating your PDF report...");
+  isGeneratingPdf.value = true;
+
+  try {
+    const targetPortfolioIds = selectedPortfolioIdCsv.value === 'all'
+        ? portfoliosList.value.map(p => p.id)
+        : [selectedPortfolioIdCsv.value];
+
+    const { data, error } = await supabase
+        .from('transactions')
+        .select(`transaction_date, portfolios ( name ), assets ( name ), type, quantity, price_per_unit, fees`)
+        .in('portfolio_id', targetPortfolioIds)
+        .order('transaction_date', { ascending: true });
+
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      toast.info("No transactions to export for the selected portfolio(s).");
+      return;
+    }
+
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+
+    const doc = new jsPDF('p', 'mm', 'a4');
+    let cursorY = 20;
+    const margin = 15;
+
+    // --- PDF Header ---
+    const portfolioName = selectedPortfolioIdCsv.value === 'all'
+        ? 'All Portfolios'
+        : portfoliosList.value.find(p => p.id === selectedPortfolioIdCsv.value)?.name || 'Selected Portfolio';
+
+    doc.setFontSize(22).setFont('helvetica', 'bold');
+    doc.text("Transaction Report", margin, cursorY);
+    cursorY += 8;
+    doc.setFontSize(12).setFont('helvetica', 'normal');
+    doc.text(`Report for: ${portfolioName}`, margin, cursorY);
+    cursorY += 5;
+    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, cursorY);
+    cursorY += 15;
+
+    // --- Transactions Table ---
+    const head = [['Date', 'Portfolio', 'Asset', 'Type', 'Qty', 'Price', 'Fees']];
+    const body = (data as any[]).map(row => [
+      new Date(row.transaction_date).toLocaleDateString('it-IT'),
+      row.portfolios.name,
+      row.assets.name,
+      row.type,
+      row.quantity.toLocaleString('it-IT'),
+      `€${row.price_per_unit.toLocaleString('it-IT', {minimumFractionDigits: 2})}`,
+      `€${(row.fees || 0).toLocaleString('it-IT', {minimumFractionDigits: 2})}`
+    ]);
+
+    autoTable(doc, {
+      startY: cursorY,
+      head: head,
+      body: body,
+      theme: 'striped',
+      headStyles: { fillColor: [41, 128, 185] },
+    });
+
+    doc.save(`transactions_report_${new Date().toISOString().split('T')[0]}.pdf`);
+    toast.success("Your transaction report has been exported as PDF.");
+
+  } catch (error: any) {
+    toast.error("Failed to export PDF: " + error.message);
+  } finally {
+    isGeneratingPdf.value = false;
+  }
+}
+
+
+// --- PORTFOLIO SUMMARY PDF Generation (UNCHANGED) ---
 
 // STEP 1: Prepare the data and render it to the hidden div
 async function preparePdfReport() {
@@ -176,7 +252,7 @@ async function preparePdfReport() {
     const { data: valuations, error: valError } = await supabase.from('asset_valuations').select('*').in('asset_id', assetIds);
     if (valError) throw valError;
 
-    const { holdings, totalRealizedGainLoss, totalCapitalInvested } = calculateHoldings(transactions);
+    const { holdings, totalRealizedGainLoss, totalCapitalInvested } = calculateHoldings(transactions as any);
     const valuationMap = createValuationMap(valuations || []);
     const portfolioState = calculatePortfolioState(holdings, valuationMap);
 
@@ -208,8 +284,8 @@ async function preparePdfReport() {
     pdfData.value.geographicAllocation = createAggData(asset => asset.metadata?.geography);
     pdfData.value.platformAllocation = createAggData(asset => asset.metadata?.platform);
 
-    pdfData.value.portfolioHistory = updateHistoricalCharts(transactions, valuations || []);
-    pdfData.value.allocationHistory = createAllocationHistoryData(transactions, valuations || []);
+    pdfData.value.portfolioHistory = updateHistoricalCharts(transactions as any, valuations || []);
+    pdfData.value.allocationHistory = createAllocationHistoryData(transactions as any, valuations || []);
 
     await nextTick();
 
@@ -247,9 +323,6 @@ async function downloadPdf() {
     cursorY += 5;
     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, cursorY);
     cursorY += 15;
-
-    // --- KPIs ---
-    // ... (You can draw the KPIs as text here if needed) ...
 
     // --- Asset Details Table ---
     doc.setFontSize(18).setFont('helvetica', 'bold');
@@ -310,7 +383,6 @@ async function downloadPdf() {
           doc.addImage(imgData, 'PNG', columnX, cursorY, imgWidth, imgHeight);
           if (columnX === margin) {
             columnX += docWidth / 2 + 5;
-            // Don't advance cursor Y yet, wait for the second column
           } else {
             columnX = margin;
             cursorY += imgHeight + 10;
@@ -332,7 +404,7 @@ async function downloadPdf() {
 }
 
 
-// --- Helper functions ---
+// --- Helper functions (UNCHANGED) ---
 function calculateHoldings(transactions: Transaction[]) {
   const holdings: Record<string, { quantity: number; costBasis: number; asset: Asset }> = {};
   let totalRealizedGainLoss = 0;
@@ -477,7 +549,7 @@ onMounted(() => {
         <Card>
           <CardHeader>
             <CardTitle>Transaction Export</CardTitle>
-            <CardDescription>Download a CSV file of your complete transaction history for the selected portfolio(s).</CardDescription>
+            <CardDescription>Download a file of your complete transaction history for the selected portfolio(s).</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid w-full max-w-sm items-center gap-2">
@@ -491,8 +563,13 @@ onMounted(() => {
               </Select>
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end">
-            <Button variant="outline" @click="exportTransactions" :disabled="isGeneratingCsv || isPreparing || isDownloading">Export Transactions (CSV)</Button>
+          <CardFooter class="flex justify-end gap-4">
+            <Button variant="outline" @click="exportTransactionsCsv" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading">
+              {{ isGeneratingCsv ? 'Exporting...' : 'Export CSV' }}
+            </Button>
+            <Button variant="outline" @click="exportTransactionsPdf" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading">
+              {{ isGeneratingPdf ? 'Exporting...' : 'Export PDF' }}
+            </Button>
           </CardFooter>
         </Card>
 
