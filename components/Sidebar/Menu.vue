@@ -52,7 +52,7 @@
   <div>
     <header class="flex items-center gap-2 p-4 hover:scale-[101%] transition cursor-pointer">
       <Logo/>
-      <p class="font-bold text-black">Capital tracker</p>
+      <p class="font-bold text-black">AssetsFlow</p>
     </header>
     <div class="px-4 grow">
       <div class="grid gap-2">

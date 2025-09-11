@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Toaster, toast } from 'vue-sonner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { UserCircle } from 'lucide-vue-next';
+import type { Database } from '~/types/supabase';
 
 // --- Supabase & Data Loading ---
-const supabase = useSupabaseClient();
+const supabase = useSupabaseClient<Database>();
 const user = useSupabaseUser();
 const router = useRouter();
 const isLoading = ref(false);

@@ -3,7 +3,8 @@
     <div class="w-full max-w-md space-y-8">
       <div>
         <NuxtLink to="/" class="flex justify-center items-center space-x-2 mb-6">
-          <Activity class="h-10 w-10 text-primary" /> <span class="text-2xl font-bold">MyInvestApp</span>
+          <Logo class="h-10 w-10 text-primary" />
+          <span class="text-2xl font-bold">AssetsFlow</span>
         </NuxtLink>
         <h2 class="text-center text-3xl font-bold tracking-tight text-foreground">
           Welcome Back!

@@ -36,6 +36,8 @@
     "vue3-apexcharts": "^1.8.0"
   },
   "devDependencies": {
-    "@types/jspdf": "^2.0.0"
+    "@types/jspdf": "^2.0.0",
+    "supabase": "^2.34.3",
+    "typescript": "^5.9.2"
   }
 }

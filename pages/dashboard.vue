@@ -369,114 +369,200 @@ watch(selectedPortfolioId, () => {
 </script>
 
 <template>
-  <div v-if="isLoading" class="flex items-center justify-center h-screen"><p>Loading Dashboard...</p></div>
-  <div v-else-if="dataError" class="flex items-center justify-center h-screen text-red-500"><p>{{ dataError }}</p></div>
-  <div v-else class="grid w-full gap-6 p-4 md:p-6">
-    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-      <div class="grow">
-        <p class="text-muted-foreground">All info about your investments in <strong>{{ userCurrency }}</strong></p>
-        <h1 class="text-2xl font-semibold md:text-3xl">Dashboard</h1>
-      </div>
-      <div>
-        <Select v-model="selectedPortfolioId">
-          <SelectTrigger><SelectValue placeholder="Select a portfolio" /></SelectTrigger>
-          <SelectContent><SelectGroup>
-            <SelectLabel>Portfolios</SelectLabel>
-            <SelectItem value="all">All Portfolios</SelectItem>
-            <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">{{ portfolio.name }}</SelectItem>
-          </SelectGroup></SelectContent>
-        </Select>
-      </div>
-    </header>
+  <!-- IMPROVED: Added a full-page skeleton loader for a better loading experience -->
+  <div v-if="isLoading" class="w-full min-h-screen bg-background p-4 md:p-6 lg:p-8">
+    <div class="max-w-screen-2xl mx-auto animate-pulse">
+      <!-- Header Skeleton -->
+      <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div class="space-y-2">
+          <div class="h-4 bg-muted rounded w-3/4"></div>
+          <div class="h-8 bg-muted rounded w-1/2"></div>
+        </div>
+        <div class="h-10 bg-muted rounded-md w-full md:w-56"></div>
+      </header>
 
-    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div v-for="card in kpiCardsData" :key="card.id" class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <h3 class="text-sm font-medium text-muted-foreground">{{ card.title }}</h3>
-        <p class="text-2xl font-bold">
-          {{ getCurrencySymbol(userCurrency) }}{{ card.amount.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
-          <span v-if="card.id === 'totalGainLoss' && card.progression" :class="card.progression >= 0 ? 'text-green-600' : 'text-red-600'" class="text-xs font-normal ml-1">
-            {{ card.progression >= 0 ? '+' : '' }}{{ card.progression.toFixed(2) }}%
-          </span>
-        </p>
-        <p class="text-xs text-muted-foreground mt-1">{{ card.description }}</p>
-      </div>
-    </section>
+      <!-- KPI Cards Skeleton -->
+      <section class="grid grid-cols-1 gap-6 sm:grid-cols-2 mb-6">
+        <div class="bg-card border rounded-xl p-6 space-y-3">
+          <div class="h-4 bg-muted rounded w-1/3"></div>
+          <div class="h-8 bg-muted rounded w-1/2"></div>
+          <div class="h-3 bg-muted rounded w-full"></div>
+        </div>
+        <div class="bg-card border rounded-xl p-6 space-y-3">
+          <div class="h-4 bg-muted rounded w-1/3"></div>
+          <div class="h-8 bg-muted rounded w-1/2"></div>
+          <div class="h-3 bg-muted rounded w-full"></div>
+        </div>
+      </section>
 
-    <main class="grid grid-cols-1 gap-6">
-      <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <Tabs default-value="Month" class="w-full">
-          <TabsList>
-            <TabsTrigger v-for="item in portfolioValueChartTabs" :key="item.title" :value="item.title">{{ item.title }}</TabsTrigger>
-          </TabsList>
-          <TabsContent v-for="item in portfolioValueChartTabs" :key="item.title" :value="item.title" class="mt-4">
+      <!-- Main Chart Skeleton -->
+      <main class="grid grid-cols-1 gap-6">
+        <div class="bg-card border rounded-xl h-[450px]"></div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-card border rounded-xl h-[400px]"></div>
+          <div class="bg-card border rounded-xl h-[400px]"></div>
+        </div>
+        <div class="bg-card border rounded-xl h-[350px]"></div>
+      </main>
+
+      <!-- Footer Skeleton -->
+      <footer class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div class="bg-card border rounded-xl h-[300px]"></div>
+        <div class="bg-card border rounded-xl h-[300px]"></div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- IMPROVED: Added a more prominent error state display -->
+  <div v-else-if="dataError" class="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-4">
+    <div class="bg-card border border-destructive/50 rounded-lg p-8 max-w-md w-full">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-12 h-12 mx-auto text-destructive mb-4"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <h2 class="text-xl font-semibold mb-2 text-card-foreground">Oops, something went wrong.</h2>
+      <p class="text-destructive text-sm">{{ dataError }}</p>
+      <button @click="loadAndProcessData" class="mt-6 inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">Try Again</button>
+    </div>
+  </div>
+
+  <!-- Polished Dashboard UI -->
+  <div v-else class="bg-muted/40 w-full min-h-screen p-4 md:p-6 lg:p-8">
+    <div class="max-w-screen-2xl mx-auto grid w-full gap-6">
+      <header class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+        <div class="grow space-y-1">
+          <h1 class="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-primary"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+            Dashboard
+          </h1>
+          <p class="text-muted-foreground">Investment insights and performance in <strong>{{ userCurrency }}</strong>.</p>
+        </div>
+        <div class="w-full md:w-56">
+          <Select v-model="selectedPortfolioId">
+            <SelectTrigger class="w-full"><SelectValue placeholder="Select a portfolio" /></SelectTrigger>
+            <SelectContent><SelectGroup>
+              <SelectLabel>Portfolios</SelectLabel>
+              <SelectItem value="all">All Portfolios</SelectItem>
+              <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">{{ portfolio.name }}</SelectItem>
+            </SelectGroup></SelectContent>
+          </Select>
+        </div>
+      </header>
+
+      <!-- IMPROVED: KPI Cards with icons and better styling -->
+      <section class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-2">
+        <div v-for="card in kpiCardsData" :key="card.id" class="bg-card text-card-foreground border rounded-xl p-6 hover:shadow-lg transition-shadow">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-medium text-muted-foreground">{{ card.title }}</h3>
+            <svg v-if="card.id === 'totalValue'" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-muted-foreground"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-muted-foreground"><path d="M12 5v14"/><path d="M17 14l-5-5-5 5"/></svg>
+          </div>
+          <div class="flex items-baseline gap-2">
+            <p class="text-3xl font-bold">
+              {{ getCurrencySymbol(userCurrency) }}{{ card.amount.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+            </p>
+            <span v-if="card.id === 'totalGainLoss' && card.progression" :class="card.progression >= 0 ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold">
+              {{ card.progression >= 0 ? '▲' : '▼' }} {{ card.progression.toFixed(2) }}%
+            </span>
+          </div>
+          <p class="text-xs text-muted-foreground mt-1">{{ card.description }}</p>
+        </div>
+      </section>
+
+      <main class="grid grid-cols-1 gap-6">
+        <div class="bg-card text-card-foreground border rounded-xl shadow-sm">
+          <Tabs default-value="Month" class="w-full">
+            <div class="flex items-center justify-between p-4 border-b">
+              <h2 class="text-xl font-semibold tracking-tight">Portfolio Value</h2>
+              <TabsList>
+                <TabsTrigger v-for="item in portfolioValueChartTabs" :key="item.title" :value="item.title">{{ item.title }}</TabsTrigger>
+              </TabsList>
+            </div>
+            <div class="p-4">
+              <TabsContent v-for="item in portfolioValueChartTabs" :key="item.title" :value="item.title" class="mt-0">
+                <ClientOnly>
+                  <MainLineChart v-if="item.chartData.length > 0" :chartData="item.chartData" :chartCategories="commonChartCategories" :chartYLabel="`Value (${getCurrencySymbol(userCurrency)})`" :chartHeight="350" />
+                  <div v-else class="flex items-center justify-center h-[350px]"><p class="text-muted-foreground">No historical data for this period.</p></div>
+                </ClientOnly>
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
+
+        <div v-if="visibleDonutCharts.length > 0" class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div v-for="chart in visibleDonutCharts" :key="chart.title" class="bg-card text-card-foreground border rounded-xl shadow-sm">
+            <div class="p-4 border-b">
+              <h2 class="text-xl font-semibold tracking-tight">{{ chart.title }}</h2>
+            </div>
+            <div class="p-4">
+              <ClientOnly>
+                <AllocationDonutChart :allocation-data="chart.data" :currency-symbol="getCurrencySymbol(userCurrency)" />
+                <template #fallback><div class="flex items-center justify-center min-h-[350px]"><p class="text-muted-foreground">Loading chart...</p></div></template>
+              </ClientOnly>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-card text-card-foreground border rounded-xl shadow-sm">
+          <div class="p-4 border-b">
+            <h2 class="text-xl font-semibold tracking-tight">Asset Allocation Over Time</h2>
+          </div>
+          <div class="p-4">
             <ClientOnly>
-              <MainLineChart v-if="item.chartData.length > 0" :chartTitle="`Portfolio Value: ${item.title}`" :chartData="item.chartData" :chartCategories="commonChartCategories" :chartXLabel="item.chartXLabel" :chartYLabel="`Value (${getCurrencySymbol(userCurrency)})`" :chartHeight="350" />
-              <div v-else class="flex items-center justify-center h-[350px]"><p>No historical data for this period.</p></div>
+              <AllocationAreaChart v-if="assetAllocationHistoryData.length > 0" :chart-data="assetAllocationHistoryData" />
+              <div v-else class="h-[300px] flex items-center justify-center"><p class="text-muted-foreground">Not enough data to display history.</p></div>
             </ClientOnly>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      <!-- MODIFIED: Dynamic grid for donut charts -->
-      <div v-if="visibleDonutCharts.length > 0" class="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div v-for="chart in visibleDonutCharts" :key="chart.title" class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-          <h2 class="text-xl font-semibold mb-2">{{ chart.title }}</h2>
-          <ClientOnly>
-            <AllocationDonutChart :allocation-data="chart.data" />
-            <template #fallback><div class="flex items-center justify-center min-h-[350px]"><p>Loading chart...</p></div></template>
-          </ClientOnly>
+          </div>
         </div>
-      </div>
+      </main>
 
-      <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <h2 class="text-xl font-semibold mb-2">Asset Allocation Over Time</h2>
-        <ClientOnly><AllocationAreaChart v-if="assetAllocationHistoryData.length > 0" :chart-data="assetAllocationHistoryData" /><div v-else class="h-[300px] flex items-center justify-center"><p>Not enough data.</p></div></ClientOnly>
-      </div>
-    </main>
-
-    <footer class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xl font-semibold">Recent Transactions</h2>
-          <a href="/transactions" class="text-sm text-blue-500 hover:underline">View All</a>
-        </div>
-        <div class="space-y-4">
-          <div v-if="recentTransactions.length === 0" class="text-center py-10 text-muted-foreground"><p>No recent transactions.</p></div>
-          <div v-for="tx in recentTransactions" :key="tx.id" class="flex items-center">
-            <div class="ml-4 space-y-1">
-              <p class="text-sm font-medium leading-none">{{ tx.assets.name }}</p>
-              <p class="text-sm text-muted-foreground">{{ tx.type === 'BUY' ? 'Bought' : 'Sold' }} {{ tx.quantity.toLocaleString() }} shares</p>
-            </div>
-            <div class="ml-auto font-medium text-right" :class="tx.type === 'BUY' ? 'text-green-600' : 'text-red-600'">
-              {{ tx.type === 'BUY' ? '+' : '-' }}{{ getCurrencySymbol(tx.assets.currency) }}{{ (tx.quantity * tx.price_per_unit).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}
-              <p class="text-xs text-muted-foreground font-normal">{{ new Date(tx.transaction_date).toLocaleDateString() }}</p>
+      <!-- IMPROVED: Footer cards with better list item styling -->
+      <footer class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-card text-card-foreground border rounded-xl shadow-sm">
+          <div class="flex items-center justify-between p-4 border-b">
+            <h2 class="text-xl font-semibold tracking-tight">Recent Transactions</h2>
+            <a href="/transactions" class="text-sm font-medium text-primary hover:underline">View All</a>
+          </div>
+          <div class="p-4 space-y-4">
+            <div v-if="recentTransactions.length === 0" class="text-center py-10 text-muted-foreground"><p>No recent transactions.</p></div>
+            <div v-for="tx in recentTransactions" :key="tx.id" class="flex items-center">
+              <div class="h-10 w-10 rounded-full flex items-center justify-center" :class="tx.type === 'BUY' ? 'bg-green-100 dark:bg-green-900/50' : 'bg-red-100 dark:bg-red-900/50'">
+                <svg v-if="tx.type === 'BUY'" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-green-600 dark:text-green-400"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-red-600 dark:text-red-400"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+              </div>
+              <div class="ml-4 space-y-1">
+                <p class="text-sm font-medium leading-none">{{ tx.assets.name }}</p>
+                <p class="text-sm text-muted-foreground">{{ tx.type === 'BUY' ? 'Buy' : 'Sell' }} &middot; {{ new Date(tx.transaction_date).toLocaleDateString() }}</p>
+              </div>
+              <div class="ml-auto font-medium text-right">
+                <p :class="tx.type === 'BUY' ? 'text-green-600' : 'text-red-600'">
+                  {{ tx.type === 'BUY' ? '+' : '-' }}{{ getCurrencySymbol(tx.assets.currency) }}{{ (tx.quantity * tx.price_per_unit).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}
+                </p>
+                <p class="text-xs text-muted-foreground font-normal">{{ tx.quantity.toLocaleString() }} shares</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <!-- MODIFIED: Payouts section now shows dynamic data -->
-      <div class="p-4 border rounded-lg shadow-sm bg-card text-card-foreground">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xl font-semibold">Next Dividends/Payouts</h2>
-          <a href="/income" class="text-sm text-blue-500 hover:underline">View All</a>
-        </div>
-        <div class="space-y-4">
-          <div v-if="upcomingPayouts.length === 0" class="text-center py-10 text-muted-foreground">
-            <p>No upcoming payouts found.</p>
+        <div class="bg-card text-card-foreground border rounded-xl shadow-sm">
+          <div class="flex items-center justify-between p-4 border-b">
+            <h2 class="text-xl font-semibold tracking-tight">Next Payouts</h2>
+            <a href="/income" class="text-sm font-medium text-primary hover:underline">View All</a>
           </div>
-          <div v-for="payout in upcomingPayouts" :key="payout.id" class="flex items-center">
-            <div class="ml-4 space-y-1">
-              <p class="text-sm font-medium leading-none">{{ payout.source_asset?.name || payout.description }}</p>
-              <p class="text-sm text-muted-foreground">
-                Expected on {{ new Date(payout.payout_date).toLocaleDateString() }}
-              </p>
-            </div>
-            <div class="ml-auto font-medium text-right text-green-600">
-              +{{ getCurrencySymbol(userCurrency) }}{{ convertCurrency(payout.amount, payout.destination_asset?.currency, userCurrency).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}
+          <div class="p-4 space-y-4">
+            <div v-if="upcomingPayouts.length === 0" class="text-center py-10 text-muted-foreground"><p>No upcoming payouts found.</p></div>
+            <div v-for="payout in upcomingPayouts" :key="payout.id" class="flex items-center">
+              <div class="h-10 w-10 rounded-full flex items-center justify-center bg-blue-100 dark:bg-blue-900/50">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-blue-600 dark:text-blue-400"><path d="M20 12v4H4v-4"/><path d="M16 8H8"/><path d="M12 4v10"/><path d="m16 16.5-4 4-4-4"/></svg>
+              </div>
+              <div class="ml-4 space-y-1">
+                <p class="text-sm font-medium leading-none">{{ payout.source_asset?.name || payout.description }}</p>
+                <p class="text-sm text-muted-foreground">Expected on {{ new Date(payout.payout_date).toLocaleDateString() }}</p>
+              </div>
+              <div class="ml-auto font-medium text-right text-green-600">
+                +{{ getCurrencySymbol(userCurrency) }}{{ convertCurrency(payout.amount, payout.destination_asset?.currency, userCurrency).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </footer>
+      </footer>
+    </div>
   </div>
 </template>
+

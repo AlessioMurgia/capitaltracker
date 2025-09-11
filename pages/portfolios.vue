@@ -8,48 +8,20 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Toaster, toast } from 'vue-sonner';
 import 'vue-sonner/style.css'
+import type { Database } from '~/types/supabase';
+
+type Portfolio = Database['public']['Tables']['portfolios']['Row'];
+type Transaction = Database['public']['Tables']['transactions']['Row'] & { assets: Asset };
+type Asset = Database['public']['Tables']['assets']['Row'];
+type PartialAssetValuation = Pick<Database['public']['Tables']['asset_valuations']['Row'], 'asset_id' | 'date' | 'value'>;
+type ConversionRate = Database['public']['Tables']['currency_conversions']['Row'];
+
 
 // --- Supabase & Data Loading ---
-const supabase = useSupabaseClient();
+const supabase = useSupabaseClient<Database>();
 const user = useSupabaseUser();
 const isLoading = ref(true);
 const dataError = ref<string | null>(null);
-
-// --- Interfaces ---
-interface Portfolio {
-  id: string;
-  user_id: string;
-  name: string;
-  description: string | null;
-  created_at: string;
-}
-
-interface Asset {
-  id: string;
-  asset_class: string;
-  currency: string;
-}
-
-interface Transaction {
-  id: string;
-  portfolio_id: string;
-  asset_id: string;
-  type: 'BUY' | 'SELL';
-  quantity: number;
-  assets: Asset;
-}
-
-interface Valuation {
-  asset_id: string;
-  date: string;
-  value: number;
-}
-
-interface ConversionRate {
-  base_currency: string;
-  target_currency: string;
-  rate: number;
-}
 
 // --- Component State ---
 const portfolios = ref<Portfolio[]>([]);
@@ -119,25 +91,29 @@ async function fetchData() {
 
     // If there are transactions, fetch their valuations and calculate totals
     if (transactions && transactions.length > 0) {
-      const assetIds = [...new Set(transactions.map(tx => tx.asset_id))];
-      const { data: valuations, error: valError } = await supabase
-          .from('asset_valuations')
-          .select('asset_id, date, value')
-          .in('asset_id', assetIds);
-      if (valError) throw valError;
+      const assetIds = [...new Set(transactions.map(tx => tx.asset_id).filter((id): id is string => id !== null))];
+      if (assetIds.length > 0) {
+        const { data: valuations, error: valError } = await supabase
+            .from('asset_valuations')
+            .select('asset_id, date, value')
+            .in('asset_id', assetIds);
+        if (valError) throw valError;
 
-      const latestValuationMap = (valuations || []).reduce((acc, val) => {
-        if (!acc[val.asset_id] || new Date(val.date) > new Date(acc[val.asset_id].date)) {
-          acc[val.asset_id] = val;
-        }
-        return acc;
-      }, {} as Record<string, Valuation>);
+        const latestValuationMap = (valuations || []).reduce((acc, val) => {
+          if (val.asset_id && (!acc[val.asset_id] || (val.date && acc[val.asset_id].date && new Date(val.date!) > new Date(acc[val.asset_id].date!)))) {
+            acc[val.asset_id] = val;
+          }
+          return acc;
+        }, {} as Record<string, PartialAssetValuation>);
 
-      const latestValueMap = Object.fromEntries(
-          Object.entries(latestValuationMap).map(([assetId, val]) => [assetId, val.value])
-      );
+        const latestValueMap = Object.fromEntries(
+            Object.entries(latestValuationMap).map(([assetId, val]) => [assetId, val.value ?? 0])
+        );
 
-      calculatePortfolioValues(transactions as Transaction[], latestValueMap);
+        calculatePortfolioValues(transactions as Transaction[], latestValueMap);
+      } else {
+        calculatePortfolioValues(transactions as Transaction[], {});
+      }
     } else {
       // If there are no transactions, initialize all portfolio totals to 0
       const totals: Record<string, number> = {};
@@ -153,27 +129,28 @@ async function fetchData() {
   }
 }
 
-function calculatePortfolioValues(transactions: Transaction[], valuationMap: Record<string, number>) {
+function calculatePortfolioValues(transactions: (Database['public']['Tables']['transactions']['Row'] & { assets: { id: string, asset_class: string | null, currency: string | null } }) [], valuationMap: Record<string, number>) {
   const totals: Record<string, number> = {};
   portfolios.value.forEach(p => totals[p.id] = 0);
 
-  const holdings: Record<string, { portfolio_id: string; quantity: number; asset: Asset }> = {};
+  const holdings: Record<string, { portfolio_id: string | null; quantity: number; asset: { id: string; asset_class: string | null; currency: string | null; } }> = {};
 
   transactions.forEach(tx => {
+    if (!tx.portfolio_id || !tx.asset_id) return;
     const key = `${tx.portfolio_id}-${tx.asset_id}`;
     if (!holdings[key]) {
       holdings[key] = { portfolio_id: tx.portfolio_id, quantity: 0, asset: tx.assets };
     }
-    holdings[key].quantity += tx.type === 'BUY' ? tx.quantity : -tx.quantity;
+    holdings[key].quantity += (tx.type === 'BUY' ? (tx.quantity ?? 0) : -(tx.quantity ?? 0));
   });
 
   Object.values(holdings).forEach(holding => {
     if(holding.quantity > 0) {
       const latestValue = valuationMap[holding.asset.id] || 0;
       const assetValueInNativeCurrency = holding.asset.asset_class === 'Cash' ? holding.quantity : holding.quantity * latestValue;
-      const convertedValue = convertCurrency(assetValueInNativeCurrency, holding.asset.currency, userCurrency.value);
+      const convertedValue = convertCurrency(assetValueInNativeCurrency, holding.asset.currency ?? undefined, userCurrency.value);
 
-      if (totals[holding.portfolio_id] !== undefined) {
+      if (holding.portfolio_id && totals[holding.portfolio_id] !== undefined) {
         totals[holding.portfolio_id] += convertedValue;
       }
     }
@@ -199,7 +176,7 @@ async function savePortfolio() {
     toast.error("Portfolio name is required.");
     return;
   }
-  const portfolioData = {
+  const portfolioData: Database['public']['Tables']['portfolios']['Insert'] = {
     user_id: user.value!.id,
     name: portfolioToEdit.value.name,
     description: portfolioToEdit.value.description,
@@ -208,7 +185,7 @@ async function savePortfolio() {
     const { data, error } = await supabase.from('portfolios').update(portfolioData).eq('id', portfolioToEdit.value.id).select().single();
     if (error) {
       toast.error("Failed to update portfolio: " + error.message);
-    } else {
+    } else if (data) {
       const index = portfolios.value.findIndex(p => p.id === data.id);
       if (index !== -1) portfolios.value[index] = data;
       toast.success(`Portfolio "${data.name}" updated.`);
@@ -218,7 +195,7 @@ async function savePortfolio() {
     const { data, error } = await supabase.from('portfolios').insert(portfolioData).select().single();
     if (error) {
       toast.error("Failed to create portfolio: " + error.message);
-    } else {
+    } else if (data) {
       portfolios.value.push(data);
       toast.success(`Portfolio "${data.name}" created.`);
       isDialogOpen.value = false;
@@ -313,11 +290,11 @@ onMounted(() => {
           <div class="grid gap-4 py-4">
             <div class="grid grid-cols-4 items-center gap-4">
               <label for="name" class="text-right">Name</label>
-              <Input id="name" v-model="portfolioToEdit!.name" class="col-span-3" />
+              <Input id="name" v-model:string="portfolioToEdit!.name" class="col-span-3" />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
               <label for="description" class="text-right">Description</label>
-              <Textarea id="description" v-model="portfolioToEdit!.description" class="col-span-3" />
+              <Textarea id="description" :model-value="portfolioToEdit!.description || ''" @update:model-value:string="portfolioToEdit!.description = $event" class="col-span-3" />
             </div>
           </div>
           <DialogFooter>
