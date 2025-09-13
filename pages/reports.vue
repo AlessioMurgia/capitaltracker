@@ -7,15 +7,18 @@ import { Toaster, toast } from 'vue-sonner';
 import AllocationDonutChart from '~/components/charts/AllocationDonutChart.vue';
 import MainLineChart from '~/components/charts/MainLineChart.vue';
 import AllocationAreaChart from '~/components/charts/AllocationAreaChart.vue';
+import { Download, FileText, FileSpreadsheet } from 'lucide-vue-next';
+import type { Database } from '~/types/supabase';
+
 
 // --- Supabase & Data Loading ---
-const supabase = useSupabaseClient();
+const supabase = useSupabaseClient<Database>();
 const user = useSupabaseUser();
 const isLoading = ref(true);
-const isPreparing = ref(false); // For PDF Summary
-const isDownloading = ref(false); // For PDF Summary
-const isGeneratingCsv = ref(false); // For CSV Transaction Export
-const isGeneratingPdf = ref(false); // For PDF Transaction Export
+const isPreparing = ref(false);
+const isDownloading = ref(false);
+const isGeneratingCsv = ref(false);
+const isGeneratingPdf = ref(false);
 
 // --- Interfaces ---
 interface Asset {
@@ -58,7 +61,7 @@ interface Portfolio {
 const portfoliosList = ref<Portfolio[]>([]);
 const selectedPortfolioIdCsv = ref<string>('all');
 const selectedPortfolioIdPdf = ref<string>('all');
-const isPdfReady = ref(false); // State for the summary report two-step process
+const isPdfReady = ref(false);
 
 // --- State for PDF Summary Generation ---
 const pdfData = ref({
@@ -72,7 +75,7 @@ const pdfData = ref({
   platformAllocation: [] as any[],
   portfolioName: 'All Portfolios'
 });
-const commonChartCategories = { value: { name: 'Value', color: '#3b82f6' } };
+const commonChartCategories = { value: { name: 'Value', color: '#22c55e' } };
 
 
 // --- Data Fetching ---
@@ -117,10 +120,10 @@ async function exportTransactionsCsv() {
     for (const row of data as any[]) {
       const values = [
         row.transaction_date,
-        row.portfolios.name,
-        row.assets.name,
-        row.assets.ticker || '',
-        row.assets.isin || '',
+        row.portfolios!.name,
+        row.assets!.name,
+        row.assets!.ticker || '',
+        row.assets!.isin || '',
         row.type,
         row.quantity,
         row.price_per_unit,
@@ -154,9 +157,9 @@ async function exportTransactionsPdf() {
   isGeneratingPdf.value = true;
 
   try {
-    const targetPortfolioIds = selectedPortfolioIdCsv.value === 'all'
+    const targetPortfolioIds = selectedPortfolioIdPdf.value === 'all'
         ? portfoliosList.value.map(p => p.id)
-        : [selectedPortfolioIdCsv.value];
+        : [selectedPortfolioIdPdf.value];
 
     const { data, error } = await supabase
         .from('transactions')
@@ -177,10 +180,9 @@ async function exportTransactionsPdf() {
     let cursorY = 20;
     const margin = 15;
 
-    // --- PDF Header ---
-    const portfolioName = selectedPortfolioIdCsv.value === 'all'
+    const portfolioName = selectedPortfolioIdPdf.value === 'all'
         ? 'All Portfolios'
-        : portfoliosList.value.find(p => p.id === selectedPortfolioIdCsv.value)?.name || 'Selected Portfolio';
+        : portfoliosList.value.find(p => p.id === selectedPortfolioIdPdf.value)?.name || 'Selected Portfolio';
 
     doc.setFontSize(22).setFont('helvetica', 'bold');
     doc.text("Transaction Report", margin, cursorY);
@@ -191,12 +193,11 @@ async function exportTransactionsPdf() {
     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, cursorY);
     cursorY += 15;
 
-    // --- Transactions Table ---
     const head = [['Date', 'Portfolio', 'Asset', 'Type', 'Qty', 'Price', 'Fees']];
     const body = (data as any[]).map(row => [
       new Date(row.transaction_date).toLocaleDateString('it-IT'),
-      row.portfolios.name,
-      row.assets.name,
+      row.portfolios!.name,
+      row.assets!.name,
       row.type,
       row.quantity.toLocaleString('it-IT'),
       `€${row.price_per_unit.toLocaleString('it-IT', {minimumFractionDigits: 2})}`,
@@ -208,7 +209,7 @@ async function exportTransactionsPdf() {
       head: head,
       body: body,
       theme: 'striped',
-      headStyles: { fillColor: [41, 128, 185] },
+      headStyles: { fillColor: [34, 197, 94] }, // Green accent color
     });
 
     doc.save(`transactions_report_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -221,10 +222,6 @@ async function exportTransactionsPdf() {
   }
 }
 
-
-// --- PORTFOLIO SUMMARY PDF Generation (UNCHANGED) ---
-
-// STEP 1: Prepare the data and render it to the hidden div
 async function preparePdfReport() {
   if (!user.value) return;
   isPreparing.value = true;
@@ -288,7 +285,6 @@ async function preparePdfReport() {
     pdfData.value.allocationHistory = createAllocationHistoryData(transactions as any, valuations || []);
 
     await nextTick();
-
     isPdfReady.value = true;
     toast.success("Report is ready to download.");
 
@@ -300,7 +296,6 @@ async function preparePdfReport() {
   }
 }
 
-// STEP 2: Capture the rendered content and download the PDF
 async function downloadPdf() {
   isDownloading.value = true;
   try {
@@ -314,7 +309,6 @@ async function downloadPdf() {
     const margin = 15;
     const docWidth = doc.internal.pageSize.getWidth() - margin * 2;
 
-    // --- Header ---
     doc.setFontSize(22).setFont('helvetica', 'bold');
     doc.text("Portfolio Summary", margin, cursorY);
     cursorY += 8;
@@ -324,7 +318,6 @@ async function downloadPdf() {
     doc.text(`Generated on: ${new Date().toLocaleDateString()}`, margin, cursorY);
     cursorY += 15;
 
-    // --- Asset Details Table ---
     doc.setFontSize(18).setFont('helvetica', 'bold');
     doc.text("Asset Details", margin, cursorY);
     cursorY += 8;
@@ -339,11 +332,10 @@ async function downloadPdf() {
         `€${a.currentValue.toLocaleString('it-IT', {minimumFractionDigits: 2})}`
       ]),
       theme: 'striped',
-      headStyles: { fillColor: [41, 128, 185] },
+      headStyles: { fillColor: [34, 197, 94] },
     });
     cursorY = (doc as any).lastAutoTable.finalY + 15;
 
-    // --- Charts Section ---
     const chartElements = [
       { id: 'main-line-chart', title: 'Portfolio Value Over Time', fullWidth: true },
       { id: 'alloc-area-chart', title: 'Allocation Over Time', fullWidth: true },
@@ -360,7 +352,7 @@ async function downloadPdf() {
       const chartEl = document.getElementById(elInfo.id);
 
       if (chartEl) {
-        const canvas = await html2canvas(chartEl, { scale: 2, backgroundColor: null });
+        const canvas = await html2canvas(chartEl, { scale: 2, backgroundColor: '#1e293b' });
         const imgData = canvas.toDataURL('image/png');
 
         const imgWidth = elInfo.fullWidth ? docWidth : (docWidth / 2 - 5);
@@ -399,12 +391,11 @@ async function downloadPdf() {
     toast.error("Failed to download PDF: " + error.message);
   } finally {
     isDownloading.value = false;
-    isPdfReady.value = false; // Reset state
+    isPdfReady.value = false;
   }
 }
 
-
-// --- Helper functions (UNCHANGED) ---
+// --- Helper functions ---
 function calculateHoldings(transactions: Transaction[]) {
   const holdings: Record<string, { quantity: number; costBasis: number; asset: Asset }> = {};
   let totalRealizedGainLoss = 0;
@@ -533,68 +524,73 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <Toaster richColors position="top-right" />
-    <div class="grid w-full gap-8 p-4 md:p-6 max-w-4xl mx-auto">
-      <header>
-        <h1 class="text-2xl font-semibold md:text-3xl">Reports & Exports</h1>
-        <p class="text-muted-foreground">Generate downloadable reports of your financial data.</p>
+  <div class="bg-slate-900 text-slate-200 font-sans w-full min-h-screen">
+    <Toaster richColors position="top-right" theme="dark" />
+    <div class="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
+
+      <header class="mb-8">
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Reports & Exports</h1>
+        <p class="text-slate-400 mt-1">Generate downloadable reports of your financial data.</p>
       </header>
 
-      <div v-if="isLoading" class="flex items-center justify-center py-10">
-        <p>Loading...</p>
+      <div v-if="isLoading" class="animate-pulse space-y-8">
+        <div class="h-48 bg-slate-800/50 rounded-xl"></div>
+        <div class="h-48 bg-slate-800/50 rounded-xl"></div>
       </div>
 
       <div v-else class="grid grid-cols-1 gap-8">
-        <Card>
+        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle>Transaction Export</CardTitle>
-            <CardDescription>Download a file of your complete transaction history for the selected portfolio(s).</CardDescription>
+            <CardTitle class="text-white">Transaction Export</CardTitle>
+            <CardDescription class="text-slate-400">Download your complete transaction history for the selected portfolio(s).</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid w-full max-w-sm items-center gap-2">
-              <label for="portfolio-select-csv" class="text-sm font-medium">Portfolio</label>
+              <label for="portfolio-select-csv" class="text-sm font-medium text-slate-400">Portfolio</label>
               <Select v-model="selectedPortfolioIdCsv">
-                <SelectTrigger id="portfolio-select-csv"><SelectValue placeholder="Filter by portfolio..." /></SelectTrigger>
-                <SelectContent><SelectGroup>
+                <SelectTrigger id="portfolio-select-csv" class="bg-slate-800 border-slate-700 h-11"><SelectValue placeholder="All Portfolios" /></SelectTrigger>
+                <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
                   <SelectItem value="all">All Portfolios</SelectItem>
                   <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">{{ portfolio.name }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end gap-4">
-            <Button variant="outline" @click="exportTransactionsCsv" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading">
+          <CardFooter class="flex justify-end gap-4 bg-slate-800/30 border-t border-slate-700/60 py-4 px-6 rounded-b-xl">
+            <Button variant="outline" @click="exportTransactionsCsv" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
+              <FileSpreadsheet class="h-4 w-4 mr-2" />
               {{ isGeneratingCsv ? 'Exporting...' : 'Export CSV' }}
             </Button>
-            <Button variant="outline" @click="exportTransactionsPdf" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading">
+            <Button variant="outline" @click="exportTransactionsPdf" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
+              <FileText class="h-4 w-4 mr-2" />
               {{ isGeneratingPdf ? 'Exporting...' : 'Export PDF' }}
             </Button>
           </CardFooter>
         </Card>
 
-        <Card>
+        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle>Portfolio Summary Report</CardTitle>
-            <CardDescription>Generate a comprehensive PDF summary of your portfolio's current state and historical performance.</CardDescription>
+            <CardTitle class="text-white">Portfolio Summary Report</CardTitle>
+            <CardDescription class="text-slate-400">Generate a comprehensive PDF summary of your portfolio's current state and historical performance.</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid w-full max-w-sm items-center gap-2">
-              <label for="portfolio-select-pdf" class="text-sm font-medium">Portfolio</label>
+              <label for="portfolio-select-pdf" class="text-sm font-medium text-slate-400">Portfolio</label>
               <Select v-model="selectedPortfolioIdPdf">
-                <SelectTrigger id="portfolio-select-pdf"><SelectValue placeholder="Filter by portfolio..." /></SelectTrigger>
-                <SelectContent><SelectGroup>
+                <SelectTrigger id="portfolio-select-pdf" class="bg-slate-800 border-slate-700 h-11"><SelectValue placeholder="All Portfolios" /></SelectTrigger>
+                <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
                   <SelectItem value="all">All Portfolios</SelectItem>
                   <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">{{ portfolio.name }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end gap-4">
-            <Button @click="preparePdfReport" :disabled="isPreparing || isDownloading">
+          <CardFooter class="flex justify-end gap-4 bg-slate-800/30 border-t border-slate-700/60 py-4 px-6 rounded-b-xl">
+            <Button @click="preparePdfReport" :disabled="isPreparing || isDownloading" class="bg-slate-700 hover:bg-slate-600 text-white font-semibold">
               {{ isPreparing ? 'Preparing...' : 'Prepare Report' }}
             </Button>
-            <Button @click="downloadPdf" :disabled="!isPdfReady || isDownloading">
+            <Button @click="downloadPdf" :disabled="!isPdfReady || isDownloading" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold disabled:from-slate-500 disabled:to-slate-600">
+              <Download class="h-4 w-4 mr-2" />
               {{ isDownloading ? 'Downloading...' : 'Download PDF' }}
             </Button>
           </CardFooter>
@@ -603,35 +599,35 @@ onMounted(() => {
     </div>
 
     <!-- Hidden element for PDF generation -->
-    <div id="pdf-content" class="absolute -left-[9999px] top-auto w-[800px] p-8 bg-background text-foreground">
+    <div id="pdf-content" class="absolute -left-[9999px] top-auto w-[800px] p-8 bg-slate-900 text-slate-200">
       <div v-if="isPdfReady" class="space-y-8">
         <div id="main-line-chart" data-title="Portfolio Value Over Time" v-if="pdfData.portfolioHistory.length > 0">
-          <h2 class="text-2xl font-bold mb-4">Portfolio Value Over Time</h2>
-          <div class="p-4 border rounded-lg">
+          <h2 class="text-2xl font-bold mb-4 text-white">Portfolio Value Over Time</h2>
+          <div class="p-4 border border-slate-700/60 rounded-lg">
             <ClientOnly><MainLineChart :chartTitle="' '" :chartData="pdfData.portfolioHistory" :chartCategories="commonChartCategories" chartXLabel="Date" chartYLabel="Value (€)" :chartHeight="250" /></ClientOnly>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-6">
-          <div v-if="pdfData.currentAssetAllocation.length > 0" id="donut-asset" data-title="Asset Allocation" class="p-4 border rounded-lg">
-            <h2 class="text-xl font-semibold mb-2 text-center">Asset Allocation</h2>
-            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.currentAssetAllocation" :chartHeight="220" /></ClientOnly>
+          <div v-if="pdfData.currentAssetAllocation.length > 0" id="donut-asset" data-title="Asset Allocation" class="p-4 border border-slate-700/60 rounded-lg">
+            <h2 class="text-xl font-semibold mb-2 text-center text-white">Asset Allocation</h2>
+            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.currentAssetAllocation" currency-symbol="€" /></ClientOnly>
           </div>
-          <div v-if="pdfData.sectorAllocation.length > 0" id="donut-sector" data-title="Sector Allocation" class="p-4 border rounded-lg">
-            <h2 class="text-xl font-semibold mb-2 text-center">Sector Allocation</h2>
-            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.sectorAllocation" :chartHeight="220" /></ClientOnly>
+          <div v-if="pdfData.sectorAllocation.length > 0" id="donut-sector" data-title="Sector Allocation" class="p-4 border border-slate-700/60 rounded-lg">
+            <h2 class="text-xl font-semibold mb-2 text-center text-white">Sector Allocation</h2>
+            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.sectorAllocation" currency-symbol="€" /></ClientOnly>
           </div>
-          <div v-if="pdfData.geographicAllocation.length > 0" id="donut-geo" data-title="Geographic Allocation" class="p-4 border rounded-lg">
-            <h2 class="text-xl font-semibold mb-2 text-center">Geographic Allocation</h2>
-            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.geographicAllocation" :chartHeight="220" /></ClientOnly>
+          <div v-if="pdfData.geographicAllocation.length > 0" id="donut-geo" data-title="Geographic Allocation" class="p-4 border border-slate-700/60 rounded-lg">
+            <h2 class="text-xl font-semibold mb-2 text-center text-white">Geographic Allocation</h2>
+            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.geographicAllocation" currency-symbol="€" /></ClientOnly>
           </div>
-          <div v-if="pdfData.platformAllocation.length > 0" id="donut-platform" data-title="Platform Allocation" class="p-4 border rounded-lg">
-            <h2 class="text-xl font-semibold mb-2 text-center">Platform Allocation</h2>
-            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.platformAllocation" :chartHeight="220" /></ClientOnly>
+          <div v-if="pdfData.platformAllocation.length > 0" id="donut-platform" data-title="Platform Allocation" class="p-4 border border-slate-700/60 rounded-lg">
+            <h2 class="text-xl font-semibold mb-2 text-center text-white">Platform Allocation</h2>
+            <ClientOnly><AllocationDonutChart :allocation-data="pdfData.platformAllocation" currency-symbol="€" /></ClientOnly>
           </div>
         </div>
         <div v-if="pdfData.allocationHistory.length > 0" id="alloc-area-chart" data-title="Allocation Over Time">
-          <h2 class="text-2xl font-bold mb-4">Allocation Over Time</h2>
-          <div class="p-4 border rounded-lg">
+          <h2 class="text-2xl font-bold mb-4 text-white">Allocation Over Time</h2>
+          <div class="p-4 border border-slate-700/60 rounded-lg">
             <ClientOnly><AllocationAreaChart :chart-data="pdfData.allocationHistory" :chartHeight="250" /></ClientOnly>
           </div>
         </div>

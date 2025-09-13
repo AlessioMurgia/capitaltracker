@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Input } from '@/components/ui/input';
 import { Toaster, toast } from 'vue-sonner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { UserCircle } from 'lucide-vue-next';
+import { UserCircle, LogOut, ShieldAlert } from 'lucide-vue-next';
 import type { Database } from '~/types/supabase';
 
 // --- Supabase & Data Loading ---
@@ -100,7 +100,8 @@ async function removeAvatar() {
         .from('avatars')
         .remove([oldFilePath]);
 
-    if (removeError) throw removeError;
+    // Non-critical error, continue
+    if (removeError) console.warn("Could not remove old avatar from storage:", removeError.message);
 
     const { error: updateUserError } = await supabase.auth.updateUser({
       data: { avatar_url: null }
@@ -171,7 +172,7 @@ async function handleSignOut() {
   isLoading.value = false;
 }
 
-// --- Account Deletion Logic (Client-Side) ---
+// --- Account Deletion Logic ---
 function openDeleteDialog() {
   deleteConfirmationText.value = '';
   isDeleteDialogOpen.value = true;
@@ -233,145 +234,139 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <Toaster richColors position="top-right" />
-    <div class="grid w-full gap-8 p-4 md:p-6 max-w-4xl mx-auto">
-      <header>
-        <h1 class="text-2xl font-semibold md:text-3xl">Profile & Settings</h1>
-        <p class="text-muted-foreground">Manage your account details and security settings.</p>
+  <div class="bg-slate-900 text-slate-200 font-sans w-full min-h-screen">
+    <Toaster richColors position="top-right" theme="dark" />
+    <div class="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
+
+      <header class="mb-8">
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Profile & Settings</h1>
+        <p class="text-slate-400 mt-1">Manage your account details and security settings.</p>
       </header>
 
       <div class="grid grid-cols-1 gap-8">
-        <!-- Avatar and Profile Information Card -->
-        <Card>
+        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle>Profile Information</CardTitle>
-            <CardDescription>Update your personal details here.</CardDescription>
+            <CardTitle class="text-white">Profile Information</CardTitle>
+            <CardDescription class="text-slate-400">Update your personal details here.</CardDescription>
           </CardHeader>
           <CardContent class="grid gap-6">
             <div class="flex items-center gap-6">
-              <Avatar class="w-24 h-24">
+              <Avatar class="w-24 h-24 border-2 border-slate-700">
                 <AvatarImage :src="avatarUrl" alt="User Avatar" />
-                <AvatarFallback>
-                  <UserCircle class="w-full h-full text-muted-foreground" />
+                <AvatarFallback class="bg-slate-700">
+                  <UserCircle class="w-full h-full text-slate-500" />
                 </AvatarFallback>
               </Avatar>
               <div class="flex flex-col gap-2">
-                <Button @click="triggerFileInput" :disabled="isUploading">
+                <Button @click="triggerFileInput" :disabled="isUploading" class="bg-slate-700 hover:bg-slate-600 text-white font-semibold">
                   {{ isUploading ? 'Uploading...' : 'Change Picture' }}
                 </Button>
-                <Button v-if="avatarUrl" @click="removeAvatar" variant="outline" size="sm" :disabled="isLoading">
+                <Button v-if="avatarUrl" @click="removeAvatar" variant="outline" size="sm" :disabled="isLoading" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
                   Remove Picture
                 </Button>
-                <p class="text-xs text-muted-foreground mt-1">JPG, PNG, or GIF. 1MB max.</p>
+                <p class="text-xs text-slate-500 mt-1">JPG, PNG, or GIF. 1MB max.</p>
                 <input type="file" ref="fileInput" @change="handleImageUpload" accept="image/png, image/jpeg, image/gif" class="hidden" />
               </div>
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
-              <label for="email" class="text-right text-sm font-medium">Email</label>
-              <Input id="email" type="email" v-model="email" class="col-span-3" disabled />
+              <label for="email" class="text-right text-sm font-medium text-slate-400">Email</label>
+              <Input id="email" type="email" :value="email" class="col-span-3 bg-slate-800 border-slate-600" disabled />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
-              <label for="fullName" class="text-right text-sm font-medium">Full Name</label>
-              <Input id="fullName" v-model="fullName" class="col-span-3" />
+              <label for="fullName" class="text-right text-sm font-medium text-slate-400">Full Name</label>
+              <Input id="fullName" v-model="fullName" class="col-span-3 bg-slate-700 border-slate-600" />
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end">
-            <Button @click="updateProfile" :disabled="isLoading">Save Changes</Button>
+          <CardFooter class="flex justify-end bg-slate-800/30 border-t border-slate-700/60 py-4 px-6 rounded-b-xl">
+            <Button @click="updateProfile" :disabled="isLoading" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Save Changes</Button>
           </CardFooter>
         </Card>
 
-        <!-- Security Card -->
-        <Card v-if="isPasswordUser">
+        <Card v-if="isPasswordUser" class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle>Security</CardTitle>
-            <CardDescription>Change your password.</CardDescription>
+            <CardTitle class="text-white">Security</CardTitle>
+            <CardDescription class="text-slate-400">Change your password.</CardDescription>
           </CardHeader>
           <CardContent class="grid gap-4">
             <div class="grid grid-cols-4 items-center gap-4">
-              <label for="newPassword" class="text-right text-sm font-medium">New Password</label>
-              <Input id="newPassword" type="password" v-model="newPassword" class="col-span-3" />
+              <label for="newPassword" class="text-right text-sm font-medium text-slate-400">New Password</label>
+              <Input id="newPassword" type="password" v-model="newPassword" class="col-span-3 bg-slate-700 border-slate-600" />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
-              <label for="confirmPassword" class="text-right text-sm font-medium">Confirm Password</label>
-              <Input id="confirmPassword" type="password" v-model="confirmPassword" class="col-span-3" />
+              <label for="confirmPassword" class="text-right text-sm font-medium text-slate-400">Confirm Password</label>
+              <Input id="confirmPassword" type="password" v-model="confirmPassword" class="col-span-3 bg-slate-700 border-slate-600" />
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end">
-            <Button @click="updatePassword" :disabled="isLoading">Update Password</Button>
+          <CardFooter class="flex justify-end bg-slate-800/30 border-t border-slate-700/60 py-4 px-6 rounded-b-xl">
+            <Button @click="updatePassword" :disabled="isLoading" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Update Password</Button>
           </CardFooter>
         </Card>
-        <Card v-else>
+
+        <Card v-else class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle>Security</CardTitle>
+            <CardTitle class="text-white">Security</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p class="text-sm text-muted-foreground">
-              You are logged in with a social provider (e.g., Google). Password management is handled by your provider.
+          <CardContent class="flex items-center gap-4">
+            <ShieldAlert class="w-8 h-8 text-blue-400" />
+            <p class="text-sm text-slate-400">
+              You are logged in with a social provider. Password management is handled by your provider.
             </p>
           </CardContent>
         </Card>
 
-        <!-- NEW: Subscription Plan Card -->
-        <Card>
+        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle>Subscription Plan</CardTitle>
-            <CardDescription>Manage your subscription and unlock premium features.</CardDescription>
+            <CardTitle class="text-white">Subscription Plan</CardTitle>
+            <CardDescription class="text-slate-400">Manage your subscription and unlock premium features.</CardDescription>
           </CardHeader>
           <CardContent class="flex items-center justify-between">
             <div>
-              <p class="font-semibold">Current Plan: <span class="text-primary">Free</span></p>
-              <p class="text-sm text-muted-foreground">Access basic portfolio tracking features.</p>
+              <p class="font-semibold">Current Plan: <span class="bg-clip-text text-transparent bg-gradient-to-r from-green-400 to-blue-500">Free</span></p>
+              <p class="text-sm text-slate-400">Access basic portfolio tracking features.</p>
             </div>
-            <Button>Upgrade to Premium</Button>
+            <Button class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Upgrade to Premium</Button>
           </CardContent>
-          <CardFooter>
-            <ul class="text-xs text-muted-foreground list-disc list-inside space-y-1">
-              <li>Unlimited Portfolios</li>
-              <li>Advanced Analytics & Benchmarking</li>
-              <li>Automated Dividend Tracking</li>
-            </ul>
-          </CardFooter>
         </Card>
 
-        <!-- Danger Zone Card -->
-        <Card class="border-destructive">
+        <Card class="border-red-500/30 bg-slate-800/50 rounded-xl">
           <CardHeader>
-            <CardTitle class="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>These actions are permanent and cannot be undone.</CardDescription>
+            <CardTitle class="text-red-400">Danger Zone</CardTitle>
+            <CardDescription class="text-slate-500">These actions are permanent and cannot be undone.</CardDescription>
           </CardHeader>
           <CardContent class="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
-              <h4 class="font-semibold">Log Out</h4>
-              <p class="text-sm text-muted-foreground">Sign out of your account on this device.</p>
+              <h4 class="font-semibold text-slate-200">Log Out</h4>
+              <p class="text-sm text-slate-400">Sign out of your account on this device.</p>
             </div>
-            <Button variant="outline" @click="handleSignOut" :disabled="isLoading">Log Out</Button>
+            <Button variant="outline" @click="handleSignOut" :disabled="isLoading" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
+              <LogOut class="h-4 w-4 mr-2" />
+              Log Out
+            </Button>
           </CardContent>
-          <CardFooter class="flex flex-col sm:flex-row items-center justify-between gap-4 border-t pt-6">
+          <CardFooter class="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-700/60 pt-6">
             <div>
-              <h4 class="font-semibold">Delete All Data</h4>
-              <p class="text-sm text-muted-foreground">Permanently delete all your portfolios, assets, and transactions.</p>
+              <h4 class="font-semibold text-slate-200">Delete All Data & Account</h4>
+              <p class="text-sm text-slate-400">Permanently delete your account and all associated data.</p>
             </div>
-            <Button variant="destructive" @click="openDeleteDialog">Delete All My Data</Button>
+            <Button variant="destructive" @click="openDeleteDialog" class="bg-red-600 text-white hover:bg-red-700">Delete Account</Button>
           </CardFooter>
         </Card>
       </div>
 
-      <!-- Delete Account Confirmation Dialog -->
       <AlertDialog :open="isDeleteDialogOpen" @update:open="isDeleteDialogOpen = $event">
-        <AlertDialogContent>
+        <AlertDialogContent class="bg-slate-800 border-slate-700 text-slate-200">
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action is irreversible. All your data, including portfolios, assets, and transactions, will be permanently deleted. To confirm, please type your email address (<span class="font-mono text-destructive">{{ email }}</span>) in the box below.
+            <AlertDialogTitle class="text-red-400">Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription class="text-slate-400">
+              This action is irreversible. All your data will be permanently deleted. To confirm, please type your email address (<span class="font-mono text-red-400">{{ email }}</span>) in the box below.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div class="py-4">
-            <Input v-model="deleteConfirmationText" placeholder="Type your email to confirm" />
+            <Input v-model="deleteConfirmationText" placeholder="Type your email to confirm" class="bg-slate-700 border-slate-600 focus:ring-red-500" />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction @click="confirmDeleteAccount" :disabled="deleteConfirmationText !== user?.email || isLoading" class="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogCancel as-child><Button variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button></AlertDialogCancel>
+            <AlertDialogAction @click="confirmDeleteAccount" :disabled="deleteConfirmationText !== user?.email || isLoading" class="bg-red-600 text-white hover:bg-red-700">
               I understand, delete my data
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -1,28 +1,29 @@
 <template>
-  <div class="flex flex-col items-center justify-center min-h-screen bg-background px-4 py-12">
-    <div class="w-full max-w-md space-y-8">
+  <div class="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-200 font-sans px-4 py-12 relative overflow-hidden">
+    <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle at center, rgba(52, 211, 153, 0.2) 0%, transparent 40%);"></div>
+    <div class="w-full max-w-md space-y-8 z-10">
       <div>
-        <NuxtLink to="/" class="flex justify-center items-center space-x-2 mb-6">
-          <Activity class="h-10 w-10 text-primary" />
-          <span class="text-2xl font-bold">MyInvestApp</span>
+        <NuxtLink to="/" class="flex justify-center items-center space-x-3 mb-6">
+          <Logo/>
+          <span class="text-2xl font-bold tracking-wider">AssetsFlow</span>
         </NuxtLink>
-        <h2 class="text-center text-3xl font-bold tracking-tight text-foreground">
+        <h2 class="text-center text-3xl font-bold tracking-tight text-white">
           Create your Account
         </h2>
-        <p class="mt-2 text-center text-sm text-muted-foreground">
+        <p class="mt-2 text-center text-sm text-slate-400">
           And start tracking your investments like a pro.
         </p>
       </div>
 
-      <Card class="w-full">
+      <Card class="w-full bg-slate-800/50 border border-slate-700/60 rounded-xl shadow-2xl shadow-black/30">
         <CardHeader>
-          <CardTitle>Sign Up</CardTitle>
-          <CardDescription>Choose your preferred method to get started.</CardDescription>
+          <CardTitle class="text-white">Sign Up</CardTitle>
+          <CardDescription class="text-slate-400">Choose your preferred method to get started.</CardDescription>
         </CardHeader>
         <CardContent class="grid gap-6">
           <form @submit.prevent="handleEmailRegister" class="grid gap-4">
             <div class="grid gap-2">
-              <Label for="email">Email</Label>
+              <Label for="email" class="text-slate-400">Email</Label>
               <Input
                   id="email"
                   v-model="email"
@@ -30,10 +31,11 @@
                   placeholder="you@example.com"
                   required
                   :disabled="isLoadingEmail"
+                  class="bg-slate-700 border-slate-600 text-white h-11"
               />
             </div>
             <div class="grid gap-2">
-              <Label for="password">Password</Label>
+              <Label for="password" class="text-slate-400">Password</Label>
               <Input
                   id="password"
                   v-model="password"
@@ -41,10 +43,11 @@
                   placeholder="•••••••• (min. 6 characters)"
                   required
                   :disabled="isLoadingEmail"
+                  class="bg-slate-700 border-slate-600 text-white h-11"
               />
             </div>
             <div class="grid gap-2">
-              <Label for="confirm-password">Confirm Password</Label>
+              <Label for="confirm-password" class="text-slate-400">Confirm Password</Label>
               <Input
                   id="confirm-password"
                   v-model="confirmPassword"
@@ -52,40 +55,41 @@
                   placeholder="••••••••"
                   required
                   :disabled="isLoadingEmail"
+                  class="bg-slate-700 border-slate-600 text-white h-11"
               />
             </div>
 
-            <Button type="submit" class="w-full mt-2" :disabled="isLoadingEmail">
+            <Button type="submit" class="w-full mt-2 h-11 bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold" :disabled="isLoadingEmail">
               <Loader2 class="w-4 h-4 mr-2 animate-spin" v-if="isLoadingEmail" />
               {{ isLoadingEmail ? 'Registering...' : 'Create Account with Email' }}
             </Button>
           </form>
 
-          <Alert v-if="errorMessage" variant="destructive">
-            <AlertCircle class="w-4 h-4" />
+          <Alert v-if="errorMessage" variant="destructive" class="bg-red-900/20 border-red-500/30 text-red-400">
+            <AlertCircle class="w-4 h-4 text-red-400" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{{ errorMessage }}</AlertDescription>
           </Alert>
 
-          <Alert v-if="registrationMessage" variant="success">
-            <CheckCircle2 class="w-4 h-4" />
+          <Alert v-if="registrationMessage" variant="success" class="bg-green-900/20 border-green-500/30 text-green-400">
+            <CheckCircle2 class="w-4 h-4 text-green-400" />
             <AlertTitle>Success</AlertTitle>
             <AlertDescription>{{ registrationMessage }}</AlertDescription>
           </Alert>
 
           <div class="relative">
             <div class="absolute inset-0 flex items-center">
-              <span class="w-full border-t" />
+              <span class="w-full border-t border-slate-700/60" />
             </div>
             <div class="relative flex justify-center text-xs uppercase">
-              <span class="bg-card px-2 text-muted-foreground">
+              <span class="bg-slate-800 px-2 text-slate-500">
                 Or continue with
               </span>
             </div>
           </div>
 
           <div class="grid gap-3 w-full">
-            <Button variant="outline" @click="handleSocialRegister('google')" :disabled="isLoadingSocial.google || isLoadingEmail">
+            <Button variant="outline" @click="handleSocialRegister('google')" :disabled="isLoadingSocial.google || isLoadingEmail" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white h-11">
               <Loader2 v-if="isLoadingSocial.google" class="w-4 h-4 mr-2 animate-spin" />
               <Chrome v-else class="w-4 h-4 mr-2" /> Sign up with Google
             </Button>
@@ -93,17 +97,17 @@
 
         </CardContent>
         <CardFooter class="flex flex-col gap-4 items-center">
-          <p class="text-center text-sm text-muted-foreground">
+          <p class="text-center text-sm text-slate-400">
             Already have an account?
-            <NuxtLink to="/login" class="font-medium text-primary hover:underline">
+            <NuxtLink to="/login" class="font-medium text-green-400 hover:text-green-300 hover:underline">
               Sign In
             </NuxtLink>
           </p>
-          <p class="px-4 text-center text-xs text-muted-foreground">
+          <p class="px-4 text-center text-xs text-slate-500">
             By clicking continue, you agree to our
-            <NuxtLink to="/terms" class="underline hover:text-primary">Terms of Service</NuxtLink>
+            <NuxtLink to="/terms" class="underline hover:text-green-400">Terms of Service</NuxtLink>
             and
-            <NuxtLink to="/privacy" class="underline hover:text-primary">Privacy Policy</NuxtLink>.
+            <NuxtLink to="/privacy" class="underline hover:text-green-400">Privacy Policy</NuxtLink>.
           </p>
         </CardFooter>
       </Card>
@@ -113,7 +117,13 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Loader2, AlertCircle, CheckCircle2, Activity, Github, Chrome } from 'lucide-vue-next'; // Added Chrome icon
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Loader2, AlertCircle, CheckCircle2, Github, Chrome } from 'lucide-vue-next';
+import Logo from '~/components/Logo.vue';
 
 const supabase = useSupabaseClient();
 const router = useRouter();
@@ -122,19 +132,15 @@ definePageMeta({
   layout: 'auth'
 });
 
-// State for Email/Password Registration
 const email = ref('');
 const password = ref('');
 const confirmPassword = ref('');
 const isLoadingEmail = ref(false);
 
-// State for Social Registration
 const isLoadingSocial = ref({
   google: false,
-  // github: false, // Example for another provider
 });
 
-// Shared state for messages
 const errorMessage = ref<string | null>(null);
 const registrationMessage = ref<string | null>(null);
 
@@ -188,9 +194,8 @@ async function handleEmailRegister() {
   }
 }
 
-async function handleSocialRegister(provider: 'google' /* | 'github' */) {
+async function handleSocialRegister(provider: 'google') {
   if (provider === 'google') isLoadingSocial.value.google = true;
-  // if (provider === 'github') isLoadingSocial.value.github = true;
 
   errorMessage.value = null;
   registrationMessage.value = null;
@@ -199,19 +204,12 @@ async function handleSocialRegister(provider: 'google' /* | 'github' */) {
     provider: provider,
     options: {
       redirectTo: `${window.location.origin}/auth/callback`,
-      // scopes: 'email profile',
     }
   });
 
   if (error) {
     errorMessage.value = `Error with ${provider} sign-up: ${error.message}`;
     if (provider === 'google') isLoadingSocial.value.google = false;
-    // if (provider === 'github') isLoadingSocial.value.github = false;
   }
-  // On successful initiation, Supabase redirects to the OAuth provider.
 }
 </script>
-
-<style scoped>
-/* Page-specific styles if needed */
-</style>

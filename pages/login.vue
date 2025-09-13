@@ -1,28 +1,29 @@
 <template>
-  <div class="flex flex-col items-center justify-center min-h-screen bg-background px-4 py-12">
-    <div class="w-full max-w-md space-y-8">
+  <div class="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-200 font-sans px-4 py-12 relative overflow-hidden">
+    <div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle at center, rgba(52, 211, 153, 0.2) 0%, transparent 40%);"></div>
+    <div class="w-full max-w-md space-y-8 z-10">
       <div>
-        <NuxtLink to="/" class="flex justify-center items-center space-x-2 mb-6">
-          <Logo class="h-10 w-10 text-primary" />
-          <span class="text-2xl font-bold">AssetsFlow</span>
+        <NuxtLink to="/" class="flex justify-center items-center space-x-3 mb-6">
+          <Logo/>
+          <span class="text-2xl font-bold tracking-wider">AssetsFlow</span>
         </NuxtLink>
-        <h2 class="text-center text-3xl font-bold tracking-tight text-foreground">
-          Welcome Back!
+        <h2 class="text-center text-3xl font-bold tracking-tight text-white">
+          Welcome Back
         </h2>
-        <p class="mt-2 text-center text-sm text-muted-foreground">
+        <p class="mt-2 text-center text-sm text-slate-400">
           Sign in to access your investment dashboard.
         </p>
       </div>
 
-      <Card class="w-full">
+      <Card class="w-full bg-slate-800/50 border border-slate-700/60 rounded-xl shadow-2xl shadow-black/30">
         <CardHeader>
-          <CardTitle>Login</CardTitle>
-          <CardDescription>Enter your credentials to access your account.</CardDescription>
+          <CardTitle class="text-white">Login</CardTitle>
+          <CardDescription class="text-slate-400">Enter your credentials to access your account.</CardDescription>
         </CardHeader>
         <CardContent class="grid gap-6">
           <form @submit.prevent="handleEmailLogin" class="grid gap-4">
             <div class="grid gap-2">
-              <Label for="email">Email</Label>
+              <Label for="email" class="text-slate-400">Email</Label>
               <Input
                   id="email"
                   v-model="email"
@@ -30,12 +31,13 @@
                   placeholder="you@example.com"
                   required
                   :disabled="isLoadingEmail"
+                  class="bg-slate-700 border-slate-600 text-white h-11"
               />
             </div>
             <div class="grid gap-2">
               <div class="flex items-center justify-between">
-                <Label for="password">Password</Label>
-                <NuxtLink to="/forgot-password" class="text-sm font-medium text-primary hover:underline">
+                <Label for="password" class="text-slate-400">Password</Label>
+                <NuxtLink to="/forgot-password" class="text-sm font-medium text-green-400 hover:text-green-300 hover:underline">
                   Forgot password?
                 </NuxtLink>
               </div>
@@ -46,17 +48,18 @@
                   placeholder="••••••••"
                   required
                   :disabled="isLoadingEmail"
+                  class="bg-slate-700 border-slate-600 text-white h-11"
               />
             </div>
 
-            <Button type="submit" class="w-full mt-2" :disabled="isLoadingEmail">
+            <Button type="submit" class="w-full mt-2 h-11 bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold" :disabled="isLoadingEmail">
               <Loader2 class="w-4 h-4 mr-2 animate-spin" v-if="isLoadingEmail" />
               {{ isLoadingEmail ? 'Signing In...' : 'Sign In with Email' }}
             </Button>
           </form>
 
-          <Alert v-if="errorMessage" variant="destructive">
-            <AlertCircle class="w-4 h-4" />
+          <Alert v-if="errorMessage" variant="destructive" class="bg-red-900/20 border-red-500/30 text-red-400">
+            <AlertCircle class="w-4 h-4 text-red-400" />
             <AlertTitle>Login Failed</AlertTitle>
             <AlertDescription>{{ errorMessage }}</AlertDescription>
           </Alert>
@@ -65,31 +68,31 @@
         <CardFooter class="flex flex-col gap-4">
           <div class="relative w-full">
             <div class="absolute inset-0 flex items-center">
-              <span class="w-full border-t" />
+              <span class="w-full border-t border-slate-700/60" />
             </div>
             <div class="relative flex justify-center text-xs uppercase">
-              <span class="bg-card px-2 text-muted-foreground">
+              <span class="bg-slate-800 px-2 text-slate-500">
                 Or sign in with
               </span>
             </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-            <Button variant="outline" @click="handleSocialLogin('google')" :disabled="isLoadingSocial.google || isLoadingEmail">
+            <Button variant="outline" @click="handleSocialLogin('google')" :disabled="isLoadingSocial.google || isLoadingEmail" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white h-11">
               <Loader2 v-if="isLoadingSocial.google" class="w-4 h-4 mr-2 animate-spin" />
               <Chrome v-else class="w-4 h-4 mr-2"/>
               Sign in with Google
             </Button>
-            <Button variant="outline" @click="handleSocialLogin('github')" :disabled="isLoadingSocial.github || isLoadingEmail">
+            <Button variant="outline" @click="handleSocialLogin('github')" :disabled="isLoadingSocial.github || isLoadingEmail" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white h-11">
               <Loader2 v-if="isLoadingSocial.github" class="w-4 h-4 mr-2 animate-spin" />
               <Github v-else class="w-4 h-4 mr-2" />
               Sign in with GitHub
             </Button>
           </div>
 
-          <p class="mt-2 text-center text-sm text-muted-foreground">
+          <p class="mt-2 text-center text-sm text-slate-400">
             Don't have an account?
-            <NuxtLink to="/register" class="font-medium text-primary hover:underline">
+            <NuxtLink to="/register" class="font-medium text-green-400 hover:text-green-300 hover:underline">
               Sign Up
             </NuxtLink>
           </p>
@@ -106,11 +109,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertCircle, Github, Chrome, Activity } from 'lucide-vue-next'; // Added Activity
+import { Loader2, AlertCircle, Github, Chrome } from 'lucide-vue-next';
+import Logo from '~/components/Logo.vue'; // Assuming Logo component is in components folder
 
 const supabase = useSupabaseClient();
 const router = useRouter();
-// const route = useRoute(); // Uncomment if you need to read redirectTo from query params
 
 definePageMeta({
   layout: 'auth',
@@ -120,7 +123,6 @@ const email = ref('');
 const password = ref('');
 const errorMessage = ref<string | null>(null);
 
-// Separate loading states
 const isLoadingEmail = ref(false);
 const isLoadingSocial = ref({
   google: false,
@@ -139,8 +141,6 @@ async function handleEmailLogin() {
     if (error) {
       errorMessage.value = error.message;
     } else {
-      // const redirectTo = route.query.redirectTo?.toString() || '/dashboard';
-      // await router.push(redirectTo);
       await router.push('/dashboard');
     }
   } catch (err: any) {
@@ -150,7 +150,7 @@ async function handleEmailLogin() {
   }
 }
 
-type SocialProvider = 'google' | 'github'; // Define a type for stricter provider names
+type SocialProvider = 'google' | 'github';
 
 async function handleSocialLogin(provider: SocialProvider) {
   isLoadingSocial.value[provider] = true;
@@ -159,15 +159,13 @@ async function handleSocialLogin(provider: SocialProvider) {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: provider,
     options: {
-      redirectTo: `${window.location.origin}/auth/callback`, // Ensure this matches your Supabase & provider config
+      redirectTo: `${window.location.origin}/auth/callback`,
     }
   });
 
   if (error) {
     errorMessage.value = `Error with ${provider} login: ${error.message}`;
-    isLoadingSocial.value[provider] = false; // Reset loading state only on error
+    isLoadingSocial.value[provider] = false;
   }
-  // If no error, Supabase redirects to the provider's login page.
-  // The loading state will remain true until the page navigates away.
 }
 </script>

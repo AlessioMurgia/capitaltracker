@@ -1,71 +1,90 @@
 <script setup lang="ts">
-  const items = ref([
-    {
-      title: "Overview",
-      path: "/dashboard",
-      icon: "material-symbols:dashboard-outline-rounded"
-    },
-    {
-      title: "Portfolios",
-      path: "/portfolios",
-      icon: "material-symbols:account-balance-wallet-outline"
-    },
-    {
-      title: "Assets",
-      path: "/assets",
-      icon: "carbon:financial-assets"
-    },
-    {
-      title: "Transactions",
-      path: "/transactions",
-      icon: "hugeicons:transaction"
-    },
-    {
-      title: "Income",
-      path: "/income",
-      icon: "mdi:cash-sync"
-    },
-    {
-      title: "Valuations",
-      path: "/valuations",
-      icon: "carbon:chart-evaluation"
-    },
-    {
-      title: "Reports",
-      path: "/reports",
-      icon: "line-md:document-report"
-    },
-    {
-      title: "Account",
-      path: "/account",
-      icon: "material-symbols:account-circle-full"
-    },
-    {
-      title: "Settings",
-      path: "/settings",
-      icon: "material-symbols:settings"
-    }
-  ])
+import { ref } from 'vue';
+import {
+  LayoutDashboard,
+  Wallet,
+  Package,
+  ArrowRightLeft,
+  Landmark,
+  GanttChartSquare,
+  FileText,
+  User,
+  Settings,
+  LogOut
+} from 'lucide-vue-next';
+import Logo from '~/components/Logo.vue';
+
+const user = useSupabaseUser();
+const supabase = useSupabaseClient();
+const router = useRouter();
+
+const mainNavItems = ref([
+  { title: "Overview", path: "/dashboard", icon: LayoutDashboard },
+  { title: "Portfolios", path: "/portfolios", icon: Wallet },
+  { title: "Assets", path: "/assets", icon: Package },
+  { title: "Transactions", path: "/transactions", icon: ArrowRightLeft },
+  { title: "Income", path: "/income", icon: Landmark },
+  { title: "Valuations", path: "/valuations", icon: GanttChartSquare },
+  { title: "Reports", path: "/reports", icon: FileText },
+]);
+
+const userNavItems = ref([
+  { title: "Account", path: "/account", icon: User },
+  { title: "Settings", path: "/settings", icon: Settings },
+]);
+
+async function handleSignOut() {
+  const { error } = await supabase.auth.signOut();
+  if (!error) {
+    router.push('/login');
+  }
+}
 </script>
 
 <template>
-  <div>
-    <header class="flex items-center gap-2 p-4 hover:scale-[101%] transition cursor-pointer">
-      <Logo/>
-      <p class="font-bold text-black">AssetsFlow</p>
+  <div class="flex flex-col h-full bg-slate-900 text-slate-200 border-r border-slate-800">
+    <header class="flex items-center gap-3 p-4 border-b border-slate-800">
+      <NuxtLink to="/dashboard" class="flex items-center gap-3">
+        <Logo/>
+        <p class="font-bold text-white text-lg tracking-wider">AssetsFlow</p>
+      </NuxtLink>
     </header>
-    <div class="px-4 grow">
-      <div class="grid gap-2">
-        <NuxtLink :to="item.path" v-for='(item, index) in items' :key='index' class="flex items-center gap-2 px-2 py-1 transition rounded cursor-pointer hover:bg-neutral-100">
-          <Icon size="20" :name="item.icon" color="black" />
 
-          <span>{{item.title}}</span>
+    <div class="p-2 grow">
+      <nav class="grid gap-1">
+        <NuxtLink
+            v-for="item in mainNavItems"
+            :key="item.path"
+            :to="item.path"
+            class="flex items-center gap-3 rounded-md px-3 py-2 text-slate-400 transition-all hover:bg-slate-800 hover:text-slate-50"
+            active-class="bg-slate-800 text-green-400 font-semibold"
+        >
+          <component :is="item.icon" class="h-5 w-5" />
+          <span>{{ item.title }}</span>
         </NuxtLink>
-      </div>
+      </nav>
+    </div>
+
+    <div class="p-2 border-t border-slate-800">
+      <nav class="grid gap-1">
+        <NuxtLink
+            v-for="item in userNavItems"
+            :key="item.path"
+            :to="item.path"
+            class="flex items-center gap-3 rounded-md px-3 py-2 text-slate-400 transition-all hover:bg-slate-800 hover:text-slate-50"
+            active-class="bg-slate-800 text-green-400 font-semibold"
+        >
+          <component :is="item.icon" class="h-5 w-5" />
+          <span>{{ item.title }}</span>
+        </NuxtLink>
+        <button
+            @click="handleSignOut"
+            class="flex items-center w-full gap-3 rounded-md px-3 py-2 text-slate-400 transition-all hover:bg-slate-800 hover:text-red-400"
+        >
+          <LogOut class="h-5 w-5" />
+          <span>Sign Out</span>
+        </button>
+      </nav>
     </div>
   </div>
 </template>
-
-<style scoped lang="scss">
-
-</style>

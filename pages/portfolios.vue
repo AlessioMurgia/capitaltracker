@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Toaster, toast } from 'vue-sonner';
 import 'vue-sonner/style.css'
-import { Pencil, Trash2 } from 'lucide-vue-next';
+import { Pencil, Trash2, FolderPlus } from 'lucide-vue-next';
 import type { Database } from '~/types/supabase';
 
 type Portfolio = Database['public']['Tables']['portfolios']['Row'];
@@ -180,7 +180,6 @@ async function savePortfolio() {
   };
 
   if (portfolioToEdit.value.id) {
-    // --- UPDATE ---
     const { data, error } = await supabase.from('portfolios').update(portfolioData).eq('id', portfolioToEdit.value.id).select().single();
     if (error) {
       toast.error("Failed to update portfolio: " + error.message);
@@ -191,7 +190,6 @@ async function savePortfolio() {
       isDialogOpen.value = false;
     }
   } else {
-    // --- CREATE ---
     const { data, error } = await supabase.from('portfolios').insert(portfolioData).select().single();
     if (error) {
       toast.error("Failed to create portfolio: " + error.message);
@@ -241,42 +239,55 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
-    <Toaster richColors position="top-right" />
-    <div class="grid w-full gap-6 p-4 md:p-6">
-      <header class="flex items-center justify-between">
-        <div class="grow">
-          <h1 class="text-2xl font-semibold md:text-3xl">My Portfolios</h1>
-          <p class="text-muted-foreground">Manage your investment portfolios. Values are shown in <strong>{{ userCurrency }}</strong>.</p>
+  <div class="bg-slate-900 text-slate-200 font-sans w-full min-h-screen">
+    <Toaster richColors position="top-right" theme="dark" />
+    <div class="max-w-screen-xl mx-auto p-4 md:p-6 lg:p-8">
+
+      <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-8">
+        <div class="grow mb-4 md:mb-0">
+          <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">My Portfolios</h1>
+          <p class="text-slate-400 mt-1">Manage your investment portfolios. Values are shown in <strong>{{ userCurrency }}</strong>.</p>
         </div>
-        <Button @click="openCreateDialog">Create New Portfolio</Button>
+        <Button @click="openCreateDialog" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold hover:from-green-600 hover:to-blue-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/20">
+          <FolderPlus class="h-5 w-5 mr-2" />
+          Create New Portfolio
+        </Button>
       </header>
 
-      <div v-if="isLoading" class="flex items-center justify-center py-10"><p>Loading portfolios...</p></div>
-      <div v-else-if="dataError" class="text-red-500">{{ dataError }}</div>
-      <div v-else-if="portfolios.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
-        <h3 class="text-xl font-semibold">No Portfolios Found</h3>
-        <p class="text-muted-foreground mt-2">Get started by creating your first portfolio.</p>
-        <Button @click="openCreateDialog" class="mt-4">Create Portfolio</Button>
+      <div v-if="isLoading" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 animate-pulse">
+        <div v-for="i in 3" :key="i" class="bg-slate-800/50 border border-slate-700/60 rounded-xl h-52"></div>
       </div>
+
+      <div v-else-if="dataError" class="bg-slate-800 border border-red-500/50 rounded-lg p-8 max-w-md w-full mx-auto text-center">
+        <h3 class="text-xl font-semibold mb-2 text-white">Error Loading Data</h3>
+        <p class="text-red-400 text-sm">{{ dataError }}</p>
+      </div>
+
+      <div v-else-if="portfolios.length === 0" class="text-center py-16 border-2 border-dashed border-slate-700 rounded-xl bg-slate-800/30">
+        <FolderPlus class="h-16 w-16 mx-auto text-slate-600 mb-4" />
+        <h3 class="text-xl font-semibold text-white">No Portfolios Found</h3>
+        <p class="text-slate-400 mt-2">Get started by creating your first investment portfolio.</p>
+        <Button @click="openCreateDialog" class="mt-6 bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Create Portfolio</Button>
+      </div>
+
       <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <Card v-for="portfolio in portfolios" :key="portfolio.id">
-          <CardHeader>
-            <CardTitle>{{ portfolio.name }}</CardTitle>
-            <CardDescription class="h-10">{{ portfolio.description }}</CardDescription>
+        <Card v-for="portfolio in portfolios" :key="portfolio.id" class="bg-slate-800/50 border border-slate-700/60 rounded-xl shadow-lg transition-all duration-300 hover:border-green-500/50 hover:shadow-green-500/10 hover:-translate-y-1 relative group overflow-hidden">
+          <div class="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-green-500/5 via-transparent to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+          <CardHeader class="relative z-10">
+            <CardTitle class="text-white text-xl">{{ portfolio.name }}</CardTitle>
+            <CardDescription class="h-10 text-slate-400 pt-1">{{ portfolio.description }}</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p class="text-2xl font-bold">
+          <CardContent class="relative z-10">
+            <p class="text-3xl font-bold text-white">
               {{ getCurrencySymbol(userCurrency) }}{{ (portfolioTotals[portfolio.id] || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
             </p>
-            <p class="text-xs text-muted-foreground">Current Total Value</p>
+            <p class="text-xs text-slate-500">Current Total Value</p>
           </CardContent>
-          <CardFooter class="flex justify-end gap-2">
-            <!-- MODIFIED: Switched to icon buttons for a cleaner look -->
-            <Button variant="ghost" size="icon" @click="openEditDialog(portfolio)" title="Edit Portfolio">
+          <CardFooter class="flex justify-end gap-2 relative z-10">
+            <Button variant="ghost" size="icon" @click="openEditDialog(portfolio)" title="Edit Portfolio" class="text-slate-400 hover:text-white hover:bg-slate-700">
               <Pencil class="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" @click="openDeleteDialog(portfolio)" class="text-red-500 hover:text-red-600" title="Delete Portfolio">
+            <Button variant="ghost" size="icon" @click="openDeleteDialog(portfolio)" class="text-slate-400 hover:text-red-400 hover:bg-slate-700" title="Delete Portfolio">
               <Trash2 class="h-4 w-4" />
             </Button>
           </CardFooter>
@@ -285,45 +296,45 @@ onMounted(() => {
 
       <!-- Create/Edit Dialog -->
       <Dialog :open="isDialogOpen" @update:open="isDialogOpen = $event">
-        <DialogContent class="sm:max-w-[425px]">
+        <DialogContent class="sm:max-w-[425px] bg-slate-800 border-slate-700 text-slate-200">
           <DialogHeader>
-            <DialogTitle>{{ portfolioToEdit?.id ? 'Edit Portfolio' : 'Create New Portfolio' }}</DialogTitle>
-            <DialogDescription>
-              {{ portfolioToEdit?.id ? 'Update the details of your portfolio.' : 'Give your new portfolio a name and description.' }}
+            <DialogTitle class="text-white">{{ portfolioToEdit?.id ? 'Edit Portfolio' : 'Create New Portfolio' }}</DialogTitle>
+            <DialogDescription class="text-slate-400">
+              {{ portfolioToEdit?.id ? 'Update the details for your portfolio.' : 'Give your new portfolio a name and description.' }}
             </DialogDescription>
           </DialogHeader>
           <div v-if="portfolioToEdit" class="grid gap-4 py-4">
             <div class="grid grid-cols-4 items-center gap-4">
-              <label for="name" class="text-right">Name</label>
-              <!-- THE FIX: Correct v-model binding -->
-              <Input id="name" v-model="portfolioToEdit.name" class="col-span-3" />
+              <label for="name" class="text-right text-slate-400">Name</label>
+              <Input id="name" v-model="portfolioToEdit.name" class="col-span-3 bg-slate-700 border-slate-600 text-white" />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
-              <label for="description" class="text-right">Description</label>
-              <!-- THE FIX: Correct v-model binding -->
-              <Textarea id="description" v-model="portfolioToEdit.description" class="col-span-3" />
+              <label for="description" class="text-right text-slate-400">Description</label>
+              <Textarea id="description" v-model="portfolioToEdit.description" class="col-span-3 bg-slate-700 border-slate-600 text-white" />
             </div>
           </div>
           <DialogFooter>
-            <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
-            <Button @click="savePortfolio">Save Portfolio</Button>
+            <DialogClose as-child><Button type="button" variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button></DialogClose>
+            <Button @click="savePortfolio" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Save Portfolio</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <!-- Delete Confirmation Dialog -->
       <AlertDialog :open="isDeleteDialogOpen" @update:open="isDeleteDialogOpen = $event">
-        <AlertDialogContent>
+        <AlertDialogContent class="bg-slate-800 border-slate-700 text-slate-200">
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle class="text-white">Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription class="text-slate-400">
               This action cannot be undone. This will permanently delete the
-              "{{ portfolioToDelete?.name }}" portfolio and all of its associated transactions.
+              "{{ portfolioToDelete?.name }}" portfolio and all associated transactions.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction @click="confirmDelete" class="bg-destructive hover:bg-destructive/90">
+            <AlertDialogCancel asChild>
+              <Button variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button>
+            </AlertDialogCancel>
+            <AlertDialogAction @click="confirmDelete" class="bg-red-600 text-white hover:bg-red-700">
               Yes, delete portfolio
             </AlertDialogAction>
           </AlertDialogFooter>

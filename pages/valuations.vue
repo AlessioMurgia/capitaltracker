@@ -8,9 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Toaster, toast } from 'vue-sonner';
+import { Pencil, Trash2, PlusCircle } from 'lucide-vue-next';
+import type { Database } from '~/types/supabase';
 
 // --- Supabase & Data Loading ---
-const supabase = useSupabaseClient();
+const supabase = useSupabaseClient<Database>();
 const user = useSupabaseUser();
 const isLoading = ref(true);
 const dataError = ref<string | null>(null);
@@ -70,12 +72,27 @@ async function fetchData() {
   try {
     let targetPortfolioIds: string[];
     if (selectedPortfolioId.value === 'all') {
-      targetPortfolioIds = portfoliosList.value.map(p => p.id);
+      const { data: allPortfolios, error } = await supabase.from('portfolios').select('id').eq('user_id', user.value.id);
+      if (error || !allPortfolios) {
+        portfoliosList.value = [];
+        targetPortfolioIds = [];
+      } else {
+        portfoliosList.value = allPortfolios as Portfolio[];
+        targetPortfolioIds = allPortfolios.map(p => p.id);
+      }
     } else {
       targetPortfolioIds = [selectedPortfolioId.value];
     }
 
-    if (targetPortfolioIds.length === 0 && selectedPortfolioId.value !== 'all') {
+    if (portfoliosList.value.length === 0 && selectedPortfolioId.value === 'all') {
+      const { data: allPortfolios, error } = await supabase.from('portfolios').select('id, name').eq('user_id', user.value.id);
+      if(allPortfolios) portfoliosList.value = allPortfolios;
+    }
+
+
+    if (targetPortfolioIds.length === 0) {
+      autoTrackedAssets.value = [];
+      manualTrackedAssets.value = [];
       isLoading.value = false;
       return;
     }
@@ -86,19 +103,28 @@ async function fetchData() {
         .in('portfolio_id', targetPortfolioIds);
 
     if (txError) throw txError;
-    if (!transactions) { isLoading.value = false; return; }
+    if (!transactions) {
+      autoTrackedAssets.value = [];
+      manualTrackedAssets.value = [];
+      isLoading.value = false; return;
+    }
 
-    const uniqueAssets = Array.from(new Map(transactions.map(tx => [tx.assets.id, tx.assets])).values());
+    const uniqueAssets = Array.from(new Map(transactions.map(tx => tx.assets!.id && [tx.assets!.id, tx.assets])).values()).filter(Boolean) as Asset[];
     const assetIds = uniqueAssets.map(a => a.id);
 
-    if (assetIds.length === 0) { isLoading.value = false; return; }
+    if (assetIds.length === 0) {
+      autoTrackedAssets.value = [];
+      manualTrackedAssets.value = [];
+      isLoading.value = false;
+      return;
+    }
 
     const { data: valuations, error: valError } = await supabase.from('asset_valuations').select('*').in('asset_id', assetIds);
     if (valError) throw valError;
 
     const valuationsByAsset = (valuations || []).reduce((acc, val) => {
       if (!acc[val.asset_id]) acc[val.asset_id] = [];
-      acc[val.asset_id].push(val);
+      acc[val.asset_id].push(val as Valuation);
       acc[val.asset_id].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       return acc;
     }, {} as Record<string, Valuation[]>);
@@ -110,7 +136,6 @@ async function fetchData() {
 
     const nonCashAssets = enrichedAssets.filter(a => a.asset_class !== 'Cash');
 
-    // MODIFIED: Segregate based on auto_tracking flag
     autoTrackedAssets.value = nonCashAssets.filter(a => a.auto_tracking).sort((a,b) => a.name.localeCompare(b.name));
     manualTrackedAssets.value = nonCashAssets.filter(a => !a.auto_tracking).sort((a,b) => a.name.localeCompare(b.name));
 
@@ -157,10 +182,10 @@ async function saveNewValuation() {
 
   if (error) {
     toast.error("Failed to add valuation: " + error.message);
-  } else {
+  } else if (data){
     const assetIndex = manualTrackedAssets.value.findIndex(a => a.id === asset_id);
     if (assetIndex !== -1) {
-      manualTrackedAssets.value[assetIndex].valuations.unshift(data);
+      manualTrackedAssets.value[assetIndex].valuations.unshift(data as Valuation);
       manualTrackedAssets.value[assetIndex].valuations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     toast.success(`New valuation for "${valuationToAdd.value.asset_name}" added.`);
@@ -176,12 +201,12 @@ async function saveEditedValuation() {
 
   if (error) {
     toast.error("Failed to update valuation: " + error.message);
-  } else {
+  } else if (data) {
     const assetIndex = manualTrackedAssets.value.findIndex(a => a.id === data.asset_id);
     if (assetIndex !== -1) {
       const valIndex = manualTrackedAssets.value[assetIndex].valuations.findIndex(v => v.id === id);
       if (valIndex !== -1) {
-        manualTrackedAssets.value[assetIndex].valuations[valIndex] = data;
+        manualTrackedAssets.value[assetIndex].valuations[valIndex] = data as Valuation;
       }
       manualTrackedAssets.value[assetIndex].valuations.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
@@ -231,22 +256,23 @@ watch(selectedPortfolioId, () => {
 </script>
 
 <template>
-  <div>
-    <Toaster richColors position="top-right" />
-    <div class="grid w-full gap-8 p-4 md:p-6">
-      <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+  <div class="bg-slate-900 text-slate-200 font-sans w-full min-h-screen">
+    <Toaster richColors position="top-right" theme="dark" />
+    <div class="max-w-screen-xl mx-auto p-4 md:p-6 lg:p-8">
+
+      <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div class="grow">
-          <h1 class="text-2xl font-semibold md:text-3xl">Asset Valuations</h1>
-          <p class="text-muted-foreground">Monitor automated valuations and manage manual ones.</p>
+          <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Asset Valuations</h1>
+          <p class="text-slate-400 mt-1">Monitor automated valuations and manage manual entries.</p>
         </div>
         <div class="w-full md:w-64">
           <Select v-model="selectedPortfolioId">
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by portfolio..." />
+            <SelectTrigger class="w-full md:w-[200px] bg-slate-800 border-slate-700 h-11">
+              <SelectValue placeholder="All Portfolios" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent class="bg-slate-800 border-slate-700 text-slate-200">
               <SelectGroup>
-                <SelectLabel>Portfolios</SelectLabel>
+                <SelectLabel class="text-slate-400">Portfolios</SelectLabel>
                 <SelectItem value="all">All Portfolios</SelectItem>
                 <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">
                   {{ portfolio.name }}
@@ -257,143 +283,123 @@ watch(selectedPortfolioId, () => {
         </div>
       </header>
 
-      <div v-if="isLoading" class="flex items-center justify-center py-10"><p>Loading valuations...</p></div>
-      <div v-else-if="dataError" class="text-red-500">{{ dataError }}</div>
-
-      <div v-else class="grid grid-cols-1 gap-8">
-        <!-- MODIFIED: Manual Valuations Section -->
-        <section>
-          <h2 class="text-xl font-semibold mb-4">Manual Valuations</h2>
-          <div v-if="manualTrackedAssets.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
-            <p class="text-muted-foreground">No manually tracked assets found in the selected portfolio(s).</p>
-          </div>
-          <Accordion v-else type="single" collapsible class="w-full">
-            <AccordionItem v-for="asset in manualTrackedAssets" :key="asset.id" :value="asset.id">
-              <AccordionTrigger class="p-4 hover:bg-muted/50 rounded-md">
-                <div class="flex justify-between items-center w-full">
-                  <div class="text-left">
-                    <p class="font-semibold">{{ asset.name }}</p>
-                    <p class="text-sm text-muted-foreground">{{ asset.asset_class }}</p>
-                  </div>
-                  <div class="text-right">
-                    <p class="text-lg font-bold">€{{ (asset.valuations[0]?.value || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</p>
-                    <p class="text-xs text-muted-foreground">Latest Value</p>
-                  </div>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent class="p-4">
-                <div class="flex justify-end mb-4">
-                  <Button size="sm" @click="openAddValuationDialog(asset)">Add New Valuation</Button>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead class="text-right">Value</TableHead>
-                      <TableHead class="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow v-for="val in asset.valuations" :key="val.id">
-                      <TableCell>{{ new Date(val.date).toLocaleDateString() }}</TableCell>
-                      <TableCell class="text-right font-medium">€{{ val.value.toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
-                      <TableCell class="text-right">
-                        <Button variant="ghost" size="sm" @click="openEditValuationDialog(val)">Edit</Button>
-                        <Button variant="ghost" size="sm" @click="openDeleteValuationDialog(val)" class="text-red-500 hover:text-red-600">Delete</Button>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
-        </section>
-
-        <!-- MODIFIED: Auto-Tracked Valuations Section -->
-        <section>
-          <h2 class="text-xl font-semibold mb-4">Auto-Tracked Valuations</h2>
-          <div v-if="autoTrackedAssets.length === 0" class="text-center py-10 border-2 border-dashed rounded-lg">
-            <p class="text-muted-foreground">No auto-tracked assets found in the selected portfolio(s).</p>
-          </div>
-          <div v-else class="border rounded-lg">
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Asset Name</TableHead>
-                <TableHead>Asset Class</TableHead>
-                <TableHead>Last Updated</TableHead>
-                <TableHead class="text-right">Latest Value</TableHead>
-              </TableRow></TableHeader>
-              <TableBody><TableRow v-for="asset in autoTrackedAssets" :key="asset.id">
-                <TableCell class="font-medium">{{ asset.name }}</TableCell>
-                <TableCell>{{ asset.asset_class }}</TableCell>
-                <TableCell>{{ asset.valuations[0] ? new Date(asset.valuations[0].date).toLocaleDateString() : 'N/A' }}</TableCell>
-                <TableCell class="text-right font-medium">
-                  €{{ (asset.valuations[0]?.value || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
-                </TableCell>
-              </TableRow></TableBody>
-            </Table>
-          </div>
-        </section>
+      <div v-if="isLoading" class="animate-pulse space-y-8">
+        <div class="h-12 bg-slate-800/50 rounded-lg w-1/3"></div>
+        <div class="h-64 bg-slate-800/50 rounded-xl"></div>
+        <div class="h-12 bg-slate-800/50 rounded-lg w-1/3"></div>
+        <div class="h-48 bg-slate-800/50 rounded-xl"></div>
       </div>
 
-      <!-- Add/Edit Dialogs -->
+      <div v-else-if="dataError" class="bg-slate-800 border border-red-500/50 rounded-lg p-8 max-w-md w-full mx-auto text-center">
+        <h3 class="text-xl font-semibold mb-2 text-white">Error Loading Data</h3>
+        <p class="text-red-400 text-sm">{{ dataError }}</p>
+      </div>
+
+      <div v-else class="grid grid-cols-1 gap-8">
+        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
+          <CardHeader>
+            <CardTitle class="text-white text-2xl">Manual Valuations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div v-if="manualTrackedAssets.length === 0" class="text-center py-10 text-slate-500">
+              <p>No manually tracked assets found in the selected portfolio(s).</p>
+            </div>
+            <Accordion v-else type="single" collapsible class="w-full">
+              <AccordionItem v-for="asset in manualTrackedAssets" :key="asset.id" :value="asset.id" class="border-b border-slate-700/60">
+                <AccordionTrigger class="p-4 hover:bg-slate-800/50 rounded-md text-left">
+                  <div class="flex justify-between items-center w-full">
+                    <div>
+                      <p class="font-semibold text-slate-200">{{ asset.name }}</p>
+                      <p class="text-sm text-slate-400">{{ asset.asset_class }}</p>
+                    </div>
+                    <div class="text-right">
+                      <p class="text-lg font-bold text-white">€{{ (asset.valuations[0]?.value || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</p>
+                      <p class="text-xs text-slate-500">Latest Value</p>
+                    </div>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent class="p-4 bg-slate-900/50">
+                  <div class="flex justify-end mb-4">
+                    <Button size="sm" @click="openAddValuationDialog(asset)" class="bg-green-600 hover:bg-green-700 text-white font-semibold"><PlusCircle class="h-4 w-4 mr-2" />Add New Valuation</Button>
+                  </div>
+                  <Table>
+                    <TableHeader><TableRow class="border-b-slate-700/60 hover:bg-slate-800/50"><TableHead class="text-white">Date</TableHead><TableHead class="text-right text-white">Value</TableHead><TableHead class="text-right text-white">Actions</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      <TableRow v-for="val in asset.valuations" :key="val.id" class="border-b-slate-800 hover:bg-slate-800">
+                        <TableCell class="text-slate-300">{{ new Date(val.date).toLocaleDateString() }}</TableCell>
+                        <TableCell class="text-right font-medium font-mono text-slate-300">€{{ val.value.toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
+                        <TableCell class="text-right">
+                          <Button variant="ghost" size="icon" @click="openEditValuationDialog(val)" class="text-slate-400 hover:text-white hover:bg-slate-700"><Pencil class="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" @click="openDeleteValuationDialog(val)" class="text-slate-400 hover:text-red-400 hover:bg-slate-700"><Trash2 class="h-4 w-4" /></Button>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+
+        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
+          <CardHeader>
+            <CardTitle class="text-white text-2xl">Auto-Tracked Valuations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div v-if="autoTrackedAssets.length === 0" class="text-center py-10 text-slate-500">
+              <p>No auto-tracked assets found in the selected portfolio(s).</p>
+            </div>
+            <div v-else>
+              <Table>
+                <TableHeader><TableRow class="border-b-slate-700/60 hover:bg-slate-800/50"><TableHead class="text-white">Asset Name</TableHead><TableHead class="text-white">Asset Class</TableHead><TableHead class="text-white">Last Updated</TableHead><TableHead class="text-right text-white">Latest Value</TableHead></TableRow></TableHeader>
+                <TableBody><TableRow v-for="asset in autoTrackedAssets" :key="asset.id" class="border-b-slate-800 hover:bg-slate-800">
+                  <TableCell class="font-medium text-slate-200">{{ asset.name }}</TableCell>
+                  <TableCell class="text-slate-400">{{ asset.asset_class }}</TableCell>
+                  <TableCell class="text-slate-400">{{ asset.valuations[0] ? new Date(asset.valuations[0].date).toLocaleDateString() : 'N/A' }}</TableCell>
+                  <TableCell class="text-right font-medium font-mono text-slate-300">
+                    €{{ (asset.valuations[0]?.value || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+                  </TableCell>
+                </TableRow></TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Dialog :open="isAddDialogOpen" @update:open="isAddDialogOpen = $event">
-        <DialogContent class="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add Valuation for {{ valuationToAdd.asset_name }}</DialogTitle>
-            <DialogDescription>Enter the new value and the date of the valuation.</DialogDescription>
-          </DialogHeader>
+        <DialogContent class="sm:max-w-[425px] bg-slate-800 border-slate-700 text-slate-200">
+          <DialogHeader><DialogTitle class="text-white">Add Valuation for {{ valuationToAdd.asset_name }}</DialogTitle><DialogDescription class="text-slate-400">Enter the new value and the date of the valuation.</DialogDescription></DialogHeader>
           <div class="grid gap-4 py-4">
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="date-add" class="text-right">Date</label>
-              <Input id="date-add" type="date" v-model="valuationToAdd.date" class="col-span-3" />
-            </div>
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="value-add" class="text-right">Value (€)</label>
-              <Input id="value-add" type="number" v-model="valuationToAdd.value" class="col-span-3" />
-            </div>
+            <div class="grid grid-cols-4 items-center gap-4"><label for="date-add" class="text-right text-slate-400">Date</label><Input id="date-add" type="date" v-model="valuationToAdd.date" class="col-span-3 bg-slate-700 border-slate-600" /></div>
+            <div class="grid grid-cols-4 items-center gap-4"><label for="value-add" class="text-right text-slate-400">Value (€)</label><Input id="value-add" type="number" v-model="valuationToAdd.value" class="col-span-3 bg-slate-700 border-slate-600" /></div>
           </div>
           <DialogFooter>
-            <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
-            <Button @click="saveNewValuation">Save Valuation</Button>
+            <DialogClose as-child><Button type="button" variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button></DialogClose>
+            <Button @click="saveNewValuation" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Save Valuation</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog :open="isEditDialogOpen" @update:open="isEditDialogOpen = $event">
-        <DialogContent class="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Edit Valuation</DialogTitle>
-            <DialogDescription>Update the value or date for this historical record.</DialogDescription>
-          </DialogHeader>
+        <DialogContent class="sm:max-w-[425px] bg-slate-800 border-slate-700 text-slate-200">
+          <DialogHeader><DialogTitle class="text-white">Edit Valuation</DialogTitle><DialogDescription class="text-slate-400">Update the value or date for this historical record.</DialogDescription></DialogHeader>
           <div v-if="valuationToEdit" class="grid gap-4 py-4">
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="date-edit" class="text-right">Date</label>
-              <Input id="date-edit" type="date" v-model="valuationToEdit.date" class="col-span-3" />
-            </div>
-            <div class="grid grid-cols-4 items-center gap-4">
-              <label for="value-edit" class="text-right">Value (€)</label>
-              <Input id="value-edit" type="number" v-model="valuationToEdit.value" class="col-span-3" />
-            </div>
+            <div class="grid grid-cols-4 items-center gap-4"><label for="date-edit" class="text-right text-slate-400">Date</label><Input id="date-edit" type="date" v-model="valuationToEdit.date" class="col-span-3 bg-slate-700 border-slate-600" /></div>
+            <div class="grid grid-cols-4 items-center gap-4"><label for="value-edit" class="text-right text-slate-400">Value (€)</label><Input id="value-edit" type="number" v-model="valuationToEdit.value" class="col-span-3 bg-slate-700 border-slate-600" /></div>
           </div>
           <DialogFooter>
-            <DialogClose as-child><Button type="button" variant="secondary">Cancel</Button></DialogClose>
-            <Button @click="saveEditedValuation">Save Changes</Button>
+            <DialogClose as-child><Button type="button" variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button></DialogClose>
+            <Button @click="saveEditedValuation" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog :open="isDeleteDialogOpen" @update:open="isDeleteDialogOpen = $event">
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>This will permanently delete this valuation record. This action cannot be undone.</AlertDialogDescription>
-          </AlertDialogHeader>
+        <AlertDialogContent class="bg-slate-800 border-slate-700 text-slate-200">
+          <AlertDialogHeader><AlertDialogTitle class="text-white">Are you absolutely sure?</AlertDialogTitle><AlertDialogDescription class="text-slate-400">This will permanently delete this valuation record. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction @click="confirmDeleteValuation" class="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Yes, delete valuation
-            </AlertDialogAction>
+            <AlertDialogCancel as-child><Button variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button></AlertDialogCancel>
+            <AlertDialogAction @click="confirmDeleteValuation" class="bg-red-600 text-white hover:bg-red-700">Yes, delete valuation</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
