@@ -53,7 +53,7 @@
             </div>
           </div>
           <div class="hidden md:block">
-            <img src="https://placehold.co/1200x900/1E293B/34D399?text=Dashboard+UI&font=inter" alt="Screenshot of the AssetsFlow financial dashboard showing charts and asset allocations" class="rounded-xl shadow-2xl shadow-blue-500/20 transform hover:scale-105 transition-transform duration-500 border border-slate-700/50">
+            <img src="assets/landingimg2.png" alt="Screenshot of the AssetsFlow financial dashboard showing charts and asset allocations" class="rounded-xl shadow-2xl shadow-blue-500/20 transform hover:scale-105 transition-transform duration-500 border border-slate-700/50">
           </div>
         </div>
       </section>
