@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Toaster, toast } from 'vue-sonner';
 import 'vue-sonner/style.css'
+import { Pencil, Trash2 } from 'lucide-vue-next';
 import type { Database } from '~/types/supabase';
 
 type Portfolio = Database['public']['Tables']['portfolios']['Row'];
@@ -28,7 +29,7 @@ const portfolios = ref<Portfolio[]>([]);
 const portfolioTotals = ref<Record<string, number>>({});
 const isDialogOpen = ref(false);
 const isDeleteDialogOpen = ref(false);
-const portfolioToEdit = ref<Partial<Portfolio> | null>(null);
+const portfolioToEdit = ref<Partial<Portfolio>>({ name: '', description: '' });
 const portfolioToDelete = ref<Portfolio | null>(null);
 const userCurrency = ref<string>('EUR');
 const conversionRates = ref<ConversionRate[]>([]);
@@ -60,10 +61,8 @@ async function fetchData() {
   isLoading.value = true;
   dataError.value = null;
   try {
-    // Set user currency from metadata, default to EUR
     userCurrency.value = user.value.user_metadata?.default_currency || 'EUR';
 
-    // Step 1: Fetch portfolios and conversion rates
     const [portfoliosRes, ratesRes] = await Promise.all([
       supabase.from('portfolios').select('*').eq('user_id', user.value.id).order('created_at', { ascending: true }),
       supabase.from('currency_conversions').select('*')
@@ -80,16 +79,14 @@ async function fetchData() {
       return;
     }
 
-    // Step 2: Use portfolio IDs to fetch associated transactions
     const portfolioIds = portfolios.value.map(p => p.id);
     const { data: transactions, error: transactionsError } = await supabase
         .from('transactions')
         .select(`portfolio_id, asset_id, type, quantity, assets!inner(id, asset_class, currency)`)
-        .in('portfolio_id', portfolioIds); // CORRECTED: Filter by portfolio_id
+        .in('portfolio_id', portfolioIds);
 
     if (transactionsError) throw transactionsError;
 
-    // If there are transactions, fetch their valuations and calculate totals
     if (transactions && transactions.length > 0) {
       const assetIds = [...new Set(transactions.map(tx => tx.asset_id).filter((id): id is string => id !== null))];
       if (assetIds.length > 0) {
@@ -115,7 +112,6 @@ async function fetchData() {
         calculatePortfolioValues(transactions as Transaction[], {});
       }
     } else {
-      // If there are no transactions, initialize all portfolio totals to 0
       const totals: Record<string, number> = {};
       portfolios.value.forEach(p => totals[p.id] = 0);
       portfolioTotals.value = totals;
@@ -160,7 +156,7 @@ function calculatePortfolioValues(transactions: (Database['public']['Tables']['t
 }
 
 
-// --- CRUD Handlers (Unchanged) ---
+// --- CRUD Handlers ---
 function openCreateDialog() {
   portfolioToEdit.value = { name: '', description: '' };
   isDialogOpen.value = true;
@@ -172,16 +168,19 @@ function openEditDialog(portfolio: Portfolio) {
 }
 
 async function savePortfolio() {
-  if (!portfolioToEdit.value || !portfolioToEdit.value.name) {
+  if (!user.value || !portfolioToEdit.value || !portfolioToEdit.value.name) {
     toast.error("Portfolio name is required.");
     return;
   }
-  const portfolioData: Database['public']['Tables']['portfolios']['Insert'] = {
-    user_id: user.value!.id,
+
+  const portfolioData = {
+    user_id: user.value.id,
     name: portfolioToEdit.value.name,
     description: portfolioToEdit.value.description,
   };
+
   if (portfolioToEdit.value.id) {
+    // --- UPDATE ---
     const { data, error } = await supabase.from('portfolios').update(portfolioData).eq('id', portfolioToEdit.value.id).select().single();
     if (error) {
       toast.error("Failed to update portfolio: " + error.message);
@@ -192,6 +191,7 @@ async function savePortfolio() {
       isDialogOpen.value = false;
     }
   } else {
+    // --- CREATE ---
     const { data, error } = await supabase.from('portfolios').insert(portfolioData).select().single();
     if (error) {
       toast.error("Failed to create portfolio: " + error.message);
@@ -272,8 +272,13 @@ onMounted(() => {
             <p class="text-xs text-muted-foreground">Current Total Value</p>
           </CardContent>
           <CardFooter class="flex justify-end gap-2">
-            <Button variant="outline" @click="openEditDialog(portfolio)">Edit</Button>
-            <Button variant="destructive" @click="openDeleteDialog(portfolio)">Delete</Button>
+            <!-- MODIFIED: Switched to icon buttons for a cleaner look -->
+            <Button variant="ghost" size="icon" @click="openEditDialog(portfolio)" title="Edit Portfolio">
+              <Pencil class="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" @click="openDeleteDialog(portfolio)" class="text-red-500 hover:text-red-600" title="Delete Portfolio">
+              <Trash2 class="h-4 w-4" />
+            </Button>
           </CardFooter>
         </Card>
       </div>
@@ -287,14 +292,16 @@ onMounted(() => {
               {{ portfolioToEdit?.id ? 'Update the details of your portfolio.' : 'Give your new portfolio a name and description.' }}
             </DialogDescription>
           </DialogHeader>
-          <div class="grid gap-4 py-4">
+          <div v-if="portfolioToEdit" class="grid gap-4 py-4">
             <div class="grid grid-cols-4 items-center gap-4">
               <label for="name" class="text-right">Name</label>
-              <Input id="name" v-model:string="portfolioToEdit!.name" class="col-span-3" />
+              <!-- THE FIX: Correct v-model binding -->
+              <Input id="name" v-model="portfolioToEdit.name" class="col-span-3" />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
               <label for="description" class="text-right">Description</label>
-              <Textarea id="description" :model-value="portfolioToEdit!.description || ''" @update:model-value:string="portfolioToEdit!.description = $event" class="col-span-3" />
+              <!-- THE FIX: Correct v-model binding -->
+              <Textarea id="description" v-model="portfolioToEdit.description" class="col-span-3" />
             </div>
           </div>
           <DialogFooter>

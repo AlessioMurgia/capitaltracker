@@ -38,6 +38,7 @@
   "devDependencies": {
     "@types/jspdf": "^2.0.0",
     "supabase": "^2.34.3",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "nuxt": "^3.x.x"
   }
 }

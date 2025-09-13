@@ -478,7 +478,13 @@ watch(selectedPortfolioId, () => {
             <div class="p-4">
               <TabsContent v-for="item in portfolioValueChartTabs" :key="item.title" :value="item.title" class="mt-0">
                 <ClientOnly>
-                  <MainLineChart v-if="item.chartData.length > 0" :chartData="item.chartData" :chartCategories="commonChartCategories" :chartYLabel="`Value (${getCurrencySymbol(userCurrency)})`" :chartHeight="350" />
+                  <MainLineChart v-if="item.chartData.length > 0" :chartData="item.chartData"
+                                 :chartCategories="commonChartCategories"
+                                 :chartYLabel="`Value (${getCurrencySymbol(userCurrency)})`"
+                                 :chartHeight="350"
+                                 :chartXLabel="item.chartXLabel"
+                  :chartTitle="item.title"
+                  />
                   <div v-else class="flex items-center justify-center h-[350px]"><p class="text-muted-foreground">No historical data for this period.</p></div>
                 </ClientOnly>
               </TabsContent>
