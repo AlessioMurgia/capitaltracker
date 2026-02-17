@@ -297,14 +297,14 @@ watch(() => [transactionToEdit.value.asset_id, transactionToEdit.value.type], as
 </script>
 
 <template>
-  <div class="bg-slate-900 text-slate-200 font-sans w-full min-h-screen">
-    <Toaster richColors position="top-right" theme="dark" />
+  <div class="font-sans w-full">
+    <Toaster richColors position="top-right" :theme="$colorMode.value === 'dark' ? 'dark' : 'light'" />
     <div class="max-w-screen-xl mx-auto p-4 md:p-6 lg:p-8">
 
       <header class="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
         <div class="grow">
-          <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Transactions</h1>
-          <p class="text-slate-400 mt-1">A complete log of your investment activities.</p>
+          <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">Transactions</h1>
+          <p class="text-slate-500 dark:text-slate-400 mt-1">A complete log of your investment activities.</p>
         </div>
         <Button @click="openCreateDialog" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold hover:from-green-600 hover:to-blue-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/20">
           <PlusCircle class="h-5 w-5 mr-2" />
@@ -312,27 +312,27 @@ watch(() => [transactionToEdit.value.asset_id, transactionToEdit.value.type], as
         </Button>
       </header>
 
-      <div class="bg-slate-800/50 border border-slate-700/60 rounded-xl p-4 mb-8">
+      <div class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl p-4 mb-8">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 items-center gap-4">
           <div class="relative w-full lg:col-span-2">
             <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-            <Input v-model="searchTerm" placeholder="Search by asset name..." class="w-full pl-10 bg-slate-800 border-slate-700 h-11" />
+            <Input v-model="searchTerm" placeholder="Search by asset name..." class="w-full pl-10 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 h-11" />
           </div>
           <div class="flex items-center gap-2 w-full">
-            <Label for="portfolio-filter" class="text-sm text-slate-400">Portfolio:</Label>
+            <Label for="portfolio-filter" class="text-sm text-slate-500 dark:text-slate-400">Portfolio:</Label>
             <Select v-model="selectedPortfolioId">
-              <SelectTrigger id="portfolio-filter" class="w-full bg-slate-800 border-slate-700 h-11"><SelectValue placeholder="All" /></SelectTrigger>
-              <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
+              <SelectTrigger id="portfolio-filter" class="w-full bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 h-11"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup>
                 <SelectItem value="all">All Portfolios</SelectItem>
                 <SelectItem v-for="p in portfoliosList" :key="p.id" :value="p.id">{{ p.name }}</SelectItem>
               </SelectGroup></SelectContent>
             </Select>
           </div>
           <div class="flex items-center gap-2 w-full">
-            <Label for="type-filter" class="text-sm text-slate-400">Type:</Label>
+            <Label for="type-filter" class="text-sm text-slate-500 dark:text-slate-400">Type:</Label>
             <Select v-model="selectedType">
-              <SelectTrigger id="type-filter" class="w-full bg-slate-800 border-slate-700 h-11"><SelectValue placeholder="All" /></SelectTrigger>
-              <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
+              <SelectTrigger id="type-filter" class="w-full bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 h-11"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="BUY">Buy</SelectItem>
                 <SelectItem value="SELL">Sell</SelectItem>
@@ -343,53 +343,53 @@ watch(() => [transactionToEdit.value.asset_id, transactionToEdit.value.type], as
       </div>
 
       <div v-if="isLoading" class="animate-pulse space-y-3">
-        <div v-for="i in 5" :key="i" class="h-14 bg-slate-800/50 rounded-lg"></div>
+        <div v-for="i in 5" :key="i" class="h-14 bg-slate-100 dark:bg-slate-800/50 rounded-lg"></div>
       </div>
 
-      <div v-else-if="dataError" class="bg-slate-800 border border-red-500/50 rounded-lg p-8 max-w-md w-full mx-auto text-center">
-        <h3 class="text-xl font-semibold mb-2 text-white">Error Loading Data</h3>
+      <div v-else-if="dataError" class="bg-white dark:bg-slate-800 border border-red-500/50 rounded-lg p-8 max-w-md w-full mx-auto text-center">
+        <h3 class="text-xl font-semibold mb-2 text-slate-900 dark:text-white">Error Loading Data</h3>
         <p class="text-red-400 text-sm">{{ dataError }}</p>
       </div>
 
-      <div v-else-if="filteredAndSortedTransactions.length === 0" class="text-center py-16 border-2 border-dashed border-slate-700 rounded-xl bg-slate-800/30">
-        <Search class="h-16 w-16 mx-auto text-slate-600 mb-4" />
-        <h3 class="text-xl font-semibold text-white">No Transactions Found</h3>
-        <p class="text-slate-400 mt-2">Your search or filters returned no results. Try adding a new transaction.</p>
+      <div v-else-if="filteredAndSortedTransactions.length === 0" class="text-center py-16 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/30">
+        <Search class="h-16 w-16 mx-auto text-slate-500 dark:text-slate-600 mb-4" />
+        <h3 class="text-xl font-semibold text-slate-900 dark:text-white">No Transactions Found</h3>
+        <p class="text-slate-500 dark:text-slate-400 mt-2">Your search or filters returned no results. Try adding a new transaction.</p>
       </div>
 
-      <div v-else class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
+      <div v-else class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl">
         <Table>
           <TableHeader>
-            <TableRow class="border-b-slate-700/60 hover:bg-slate-800/50">
+            <TableRow class="border-b-slate-200 dark:border-b-slate-700/60 hover:bg-slate-50 dark:hover:bg-slate-800/50">
               <TableHead>
-                <Button variant="ghost" @click="sortAscending = !sortAscending" class="-ml-4 text-white hover:bg-slate-700">
+                <Button variant="ghost" @click="sortAscending = !sortAscending" class="-ml-4 text-slate-900 dark:text-white hover:bg-slate-100 dark:hover:bg-slate-700">
                   Date <ArrowUpDown class="ml-2 h-4 w-4" />
                 </Button>
               </TableHead>
-              <TableHead class="text-white">Portfolio</TableHead>
-              <TableHead class="text-white">Asset</TableHead>
-              <TableHead class="text-white">Type</TableHead>
-              <TableHead class="text-white text-right">Total Value</TableHead>
-              <TableHead class="text-right text-white">Actions</TableHead>
+              <TableHead class="text-slate-900 dark:text-white">Portfolio</TableHead>
+              <TableHead class="text-slate-900 dark:text-white">Asset</TableHead>
+              <TableHead class="text-slate-900 dark:text-white">Type</TableHead>
+              <TableHead class="text-slate-900 dark:text-white text-right">Total Value</TableHead>
+              <TableHead class="text-right text-slate-900 dark:text-white">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableRow v-for="tx in filteredAndSortedTransactions" :key="tx.id" class="border-b-slate-800 hover:bg-slate-800">
-              <TableCell class="text-slate-400">{{ new Date(tx.transaction_date).toLocaleDateString() }}</TableCell>
-              <TableCell class="text-slate-400">{{ tx.portfolios.name }}</TableCell>
-              <TableCell class="font-medium text-slate-200">{{ tx.assets.name }}</TableCell>
+            <TableRow v-for="tx in filteredAndSortedTransactions" :key="tx.id" class="border-b-slate-100 dark:border-b-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800">
+              <TableCell class="text-slate-600 dark:text-slate-400">{{ new Date(tx.transaction_date).toLocaleDateString() }}</TableCell>
+              <TableCell class="text-slate-600 dark:text-slate-400">{{ tx.portfolios.name }}</TableCell>
+              <TableCell class="font-medium text-slate-800 dark:text-slate-200">{{ tx.assets.name }}</TableCell>
               <TableCell>
-                <span :class="tx.type === 'BUY' ? 'text-green-400' : 'text-red-400'" class="font-semibold">{{ tx.type }}</span>
+                <span :class="tx.type === 'BUY' ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'" class="font-semibold">{{ tx.type }}</span>
               </TableCell>
-              <TableCell class="text-right font-medium font-mono text-slate-300">€{{ (tx.quantity * tx.price_per_unit).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
+              <TableCell class="text-right font-medium font-mono text-slate-800 dark:text-slate-300">€{{ (tx.quantity * tx.price_per_unit).toLocaleString('it-IT', {minimumFractionDigits: 2}) }}</TableCell>
               <TableCell class="text-right">
-                <Button variant="ghost" size="icon" @click="repeatTransaction(tx)" title="Repeat Transaction" class="text-slate-400 hover:text-white hover:bg-slate-700">
+                <Button variant="ghost" size="icon" @click="repeatTransaction(tx)" title="Repeat Transaction" class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700">
                   <Copy class="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" @click="openEditDialog(tx)" title="Edit Transaction" class="text-slate-400 hover:text-white hover:bg-slate-700">
+                <Button variant="ghost" size="icon" @click="openEditDialog(tx)" title="Edit Transaction" class="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700">
                   <Pencil class="h-4 w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" @click="openDeleteDialog(tx)" class="text-slate-400 hover:text-red-400 hover:bg-slate-700" title="Delete Transaction">
+                <Button variant="ghost" size="icon" @click="openDeleteDialog(tx)" class="text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-700" title="Delete Transaction">
                   <Trash2 class="h-4 w-4" />
                 </Button>
               </TableCell>
@@ -399,34 +399,34 @@ watch(() => [transactionToEdit.value.asset_id, transactionToEdit.value.type], as
       </div>
 
       <Dialog :open="isDialogOpen" @update:open="isDialogOpen = $event">
-        <DialogContent class="sm:max-w-md bg-slate-800 border-slate-700 text-slate-200">
+        <DialogContent class="sm:max-w-md bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200">
           <DialogHeader>
-            <DialogTitle class="text-white">{{ transactionToEdit?.id ? 'Edit Transaction' : 'Create New Transaction' }}</DialogTitle>
+            <DialogTitle class="text-slate-900 dark:text-white">{{ transactionToEdit?.id ? 'Edit Transaction' : 'Create New Transaction' }}</DialogTitle>
           </DialogHeader>
           <div class="flex flex-col gap-4 py-4 max-h-[70vh] overflow-y-auto px-1">
 
             <div class="space-y-2">
-              <Label class="text-slate-400">Portfolio</Label>
+              <Label class="text-slate-600 dark:text-slate-400">Portfolio</Label>
               <Select v-model="transactionToEdit.portfolio_id">
-                <SelectTrigger class="bg-slate-700 border-slate-600"><SelectValue placeholder="Select a portfolio" /></SelectTrigger>
-                <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
+                <SelectTrigger class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"><SelectValue placeholder="Select a portfolio" /></SelectTrigger>
+                <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup>
                   <SelectItem v-for="p in portfoliosList" :key="p.id" :value="p.id">{{ p.name }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
 
             <div class="space-y-2">
-              <Label class="text-slate-400">Asset</Label>
+              <Label class="text-slate-600 dark:text-slate-400">Asset</Label>
               <Popover>
                 <PopoverTrigger as-child>
-                  <Button variant="outline" role="combobox" class="w-full justify-between bg-slate-700 border-slate-600 hover:bg-slate-600">
+                  <Button variant="outline" role="combobox" class="w-full justify-between bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600">
                     {{ transactionToEdit.asset_id ? assetsList.find(a => a.id === transactionToEdit.asset_id)?.name : "Select asset..." }}
                     <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent class="w-[--radix-popover-trigger-width] p-0 bg-slate-800 border-slate-700 text-slate-200">
+                <PopoverContent class="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200">
                   <Command>
-                    <CommandInput placeholder="Search asset..." class="bg-slate-700 border-slate-600 text-white" />
+                    <CommandInput placeholder="Search asset..." class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white" />
                     <CommandList>
                       <CommandEmpty>No asset found.</CommandEmpty>
                       <CommandGroup>
@@ -443,62 +443,62 @@ watch(() => [transactionToEdit.value.asset_id, transactionToEdit.value.type], as
 
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-2">
-                <Label class="text-slate-400">Type</Label>
+                <Label class="text-slate-600 dark:text-slate-400">Type</Label>
                 <Select v-model="transactionToEdit.type">
-                  <SelectTrigger class="bg-slate-700 border-slate-600"><SelectValue placeholder="Select a type" /></SelectTrigger>
-                  <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
+                  <SelectTrigger class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"><SelectValue placeholder="Select a type" /></SelectTrigger>
+                  <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup>
                     <SelectItem value="BUY">BUY</SelectItem>
                     <SelectItem value="SELL">SELL</SelectItem>
                   </SelectGroup></SelectContent>
                 </Select>
               </div>
               <div class="space-y-2">
-                <Label for="date" class="text-slate-400">Date</Label>
-                <Input id="date" type="date" v-model="transactionToEdit.transaction_date" class="bg-slate-700 border-slate-600" />
+                <Label for="date" class="text-slate-600 dark:text-slate-400">Date</Label>
+                <Input id="date" type="date" v-model="transactionToEdit.transaction_date" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600" />
               </div>
             </div>
 
             <div class="grid grid-cols-2 gap-4">
-              <div class="space-y-2"><Label for="quantity" class="text-slate-400">Quantity</Label><Input id="quantity" type="number" v-model="transactionToEdit.quantity" class="bg-slate-700 border-slate-600"/></div>
-              <div class="space-y-2"><Label for="price" class="text-slate-400">Price / Unit</Label><Input id="price" type="number" v-model="transactionToEdit.price_per_unit" class="bg-slate-700 border-slate-600"/></div>
+              <div class="space-y-2"><Label for="quantity" class="text-slate-600 dark:text-slate-400">Quantity</Label><Input id="quantity" type="number" v-model="transactionToEdit.quantity" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"/></div>
+              <div class="space-y-2"><Label for="price" class="text-slate-600 dark:text-slate-400">Price / Unit</Label><Input id="price" type="number" v-model="transactionToEdit.price_per_unit" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"/></div>
             </div>
 
             <div class="space-y-2">
-              <Label for="fees" class="text-slate-400">Fees (€)</Label>
-              <Input id="fees" type="number" v-model="transactionToEdit.fees" class="bg-slate-700 border-slate-600" />
+              <Label for="fees" class="text-slate-600 dark:text-slate-400">Fees (€)</Label>
+              <Input id="fees" type="number" v-model="transactionToEdit.fees" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600" />
             </div>
 
-            <div v-if="transactionToEdit.type === 'SELL' && !transactionToEdit.id" class="space-y-4 pt-4 border-t border-slate-700 mt-2">
+            <div v-if="transactionToEdit.type === 'SELL' && !transactionToEdit.id" class="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-700 mt-2">
               <div class="flex items-center space-x-3"><Switch id="reinvest-proceeds" v-model:checked="reinvestProceeds" /><Label for="reinvest-proceeds">Re-invest proceeds into another asset</Label></div>
               <div v-if="reinvestProceeds" class="grid gap-4">
-                <div class="space-y-2"><Label class="text-slate-400">Destination Portfolio</Label><Select v-model="destinationPortfolioId"><SelectTrigger class="bg-slate-700 border-slate-600"><SelectValue placeholder="Select a portfolio" /></SelectTrigger><SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup><SelectItem v-for="p in portfoliosList" :key="p.id" :value="p.id">{{ p.name }}</SelectItem></SelectGroup></SelectContent></Select></div>
-                <div class="space-y-2"><Label class="text-slate-400">Destination Asset</Label><Popover><PopoverTrigger as-child><Button variant="outline" role="combobox" class="w-full justify-between bg-slate-700 border-slate-600 hover:bg-slate-600">{{ destinationAssetId ? assetsList.find(a => a.id === destinationAssetId)?.name : "Select asset..." }}<ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent class="w-[--radix-popover-trigger-width] p-0 bg-slate-800 border-slate-700 text-slate-200"><Command><CommandInput placeholder="Search asset..." class="bg-slate-700 border-slate-600 text-white" /><CommandList><CommandEmpty>No asset found.</CommandEmpty><CommandGroup><CommandItem v-for="asset in assetsList" :key="asset.id" :value="asset.name" @select="() => { destinationAssetId = asset.id }"><Check class="mr-2 h-4 w-4" :class="destinationAssetId === asset.id ? 'opacity-100' : 'opacity-0'" />{{ asset.name }}</CommandItem></CommandGroup></CommandList></Command></PopoverContent></Popover></div>
+                <div class="space-y-2"><Label class="text-slate-600 dark:text-slate-400">Destination Portfolio</Label><Select v-model="destinationPortfolioId"><SelectTrigger class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"><SelectValue placeholder="Select a portfolio" /></SelectTrigger><SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup><SelectItem v-for="p in portfoliosList" :key="p.id" :value="p.id">{{ p.name }}</SelectItem></SelectGroup></SelectContent></Select></div>
+                <div class="space-y-2"><Label class="text-slate-600 dark:text-slate-400">Destination Asset</Label><Popover><PopoverTrigger as-child><Button variant="outline" role="combobox" class="w-full justify-between bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600">{{ destinationAssetId ? assetsList.find(a => a.id === destinationAssetId)?.name : "Select asset..." }}<ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" /></Button></PopoverTrigger><PopoverContent class="w-[--radix-popover-trigger-width] p-0 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><Command><CommandInput placeholder="Search asset..." class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white" /><CommandList><CommandEmpty>No asset found.</CommandEmpty><CommandGroup><CommandItem v-for="asset in assetsList" :key="asset.id" :value="asset.name" @select="() => { destinationAssetId = asset.id }"><Check class="mr-2 h-4 w-4" :class="destinationAssetId === asset.id ? 'opacity-100' : 'opacity-0'" />{{ asset.name }}</CommandItem></CommandGroup></CommandList></Command></PopoverContent></Popover></div>
               </div>
             </div>
 
-            <div class="flex items-center space-x-3 pt-4 border-t border-slate-700 mt-2"><Switch id="is-recurring" v-model:checked="transactionToEdit.is_recurring" /><Label for="is-recurring">Mark as a recurring transaction template</Label></div>
-            <div v-if="transactionToEdit.is_recurring" class="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
-              <div class="space-y-2"><Label class="text-slate-400">Frequency</Label><Select v-model="transactionToEdit.recurring_frequency"><SelectTrigger class="bg-slate-700 border-slate-600"><SelectValue placeholder="Select frequency" /></SelectTrigger><SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup><SelectItem v-for="f in frequencyOptions" :key="f" :value="f" class="capitalize">{{ f }}</SelectItem></SelectGroup></SelectContent></Select></div>
-              <div class="space-y-2"><Label for="end-date" class="text-slate-400">End Date (Optional)</Label><Input id="end-date" type="date" v-model="transactionToEdit.recurring_end_date" class="bg-slate-700 border-slate-600" /></div>
+            <div class="flex items-center space-x-3 pt-4 border-t border-slate-200 dark:border-slate-700 mt-2"><Switch id="is-recurring" v-model:checked="transactionToEdit.is_recurring" /><Label for="is-recurring">Mark as a recurring transaction template</Label></div>
+            <div v-if="transactionToEdit.is_recurring" class="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <div class="space-y-2"><Label class="text-slate-600 dark:text-slate-400">Frequency</Label><Select v-model="transactionToEdit.recurring_frequency"><SelectTrigger class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"><SelectValue placeholder="Select frequency" /></SelectTrigger><SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup><SelectItem v-for="f in frequencyOptions" :key="f" :value="f" class="capitalize">{{ f }}</SelectItem></SelectGroup></SelectContent></Select></div>
+              <div class="space-y-2"><Label for="end-date" class="text-slate-600 dark:text-slate-400">End Date (Optional)</Label><Input id="end-date" type="date" v-model="transactionToEdit.recurring_end_date" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600" /></div>
             </div>
           </div>
           <DialogFooter>
-            <DialogClose as-child><Button type="button" variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button></DialogClose>
+            <DialogClose as-child><Button type="button" variant="outline" class="border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white">Cancel</Button></DialogClose>
             <Button @click="saveTransaction" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Save Transaction</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog :open="isDeleteDialogOpen" @update:open="isDeleteDialogOpen = $event">
-        <AlertDialogContent class="bg-slate-800 border-slate-700 text-slate-200">
+        <AlertDialogContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200">
           <AlertDialogHeader>
-            <AlertDialogTitle class="text-white">Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription class="text-slate-400">
+            <AlertDialogTitle class="text-slate-900 dark:text-white">Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription class="text-slate-500 dark:text-slate-400">
               This will permanently delete this transaction. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel as-child><Button variant="outline" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">Cancel</Button></AlertDialogCancel>
+            <AlertDialogCancel as-child><Button variant="outline" class="border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white">Cancel</Button></AlertDialogCancel>
             <AlertDialogAction @click="confirmDelete" class="bg-red-600 text-white hover:bg-red-700">Yes, delete transaction</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

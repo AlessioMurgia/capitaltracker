@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Toaster, toast } from 'vue-sonner';
 import { Download } from 'lucide-vue-next';
 import type { Database } from '~/types/supabase';
+import ThemeSwitcher from '~/components/ThemeSwitcher.vue';
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient<Database>();
@@ -158,34 +159,37 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="bg-slate-900 text-slate-200 font-sans w-full min-h-screen">
-    <Toaster richColors position="top-right" theme="dark" />
+  <div class="font-sans w-full">
+    <Toaster richColors position="top-right" :theme="$colorMode.value === 'dark' ? 'dark' : 'light'" />
     <div class="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
 
       <header class="mb-8">
-        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Settings</h1>
-        <p class="text-slate-400 mt-1">Customize your application preferences and manage your data.</p>
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">Settings</h1>
+        <p class="text-slate-500 dark:text-slate-400 mt-1">Customize your application preferences and manage your data.</p>
       </header>
 
       <div v-if="isLoading" class="animate-pulse space-y-8">
-        <div class="h-64 bg-slate-800/50 rounded-xl"></div>
-        <div class="h-48 bg-slate-800/50 rounded-xl"></div>
+        <div class="h-64 bg-slate-100 dark:bg-slate-800/50 rounded-xl"></div>
+        <div class="h-48 bg-slate-100 dark:bg-slate-800/50 rounded-xl"></div>
       </div>
 
       <div v-else class="grid grid-cols-1 gap-8">
-        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
+        <Card class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle class="text-white">Preferences</CardTitle>
-            <CardDescription class="text-slate-400">Set your default preferences for the application.</CardDescription>
+            <CardTitle class="text-slate-900 dark:text-white">Preferences</CardTitle>
+            <CardDescription class="text-slate-500 dark:text-slate-400">Set your default preferences for the application.</CardDescription>
           </CardHeader>
           <CardContent class="grid gap-6">
             <div class="grid grid-cols-3 items-center gap-4">
-              <label for="default-currency" class="text-sm font-medium text-slate-300">Default Currency</label>
+              <ThemeSwitcher />
+            </div>
+            <div class="grid grid-cols-3 items-center gap-4">
+              <label for="default-currency" class="text-sm font-medium text-slate-600 dark:text-slate-300">Default Currency</label>
               <Select v-model="settings.default_currency">
-                <SelectTrigger class="col-span-2 bg-slate-800 border-slate-700 h-11">
+                <SelectTrigger class="col-span-2 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 h-11">
                   <SelectValue placeholder="Select a currency" />
                 </SelectTrigger>
-                <SelectContent class="bg-slate-800 border-slate-700 text-slate-200">
+                <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200">
                   <SelectGroup>
                     <SelectItem v-for="c in currencyOptions" :key="c" :value="c">{{ c }}</SelectItem>
                   </SelectGroup>
@@ -193,12 +197,12 @@ onMounted(() => {
               </Select>
             </div>
             <div class="grid grid-cols-3 items-center gap-4">
-              <label for="primary-portfolio" class="text-sm font-medium text-slate-300">Primary Portfolio</label>
+              <label for="primary-portfolio" class="text-sm font-medium text-slate-600 dark:text-slate-300">Primary Portfolio</label>
               <Select v-model="settings.primary_portfolio_id">
-                <SelectTrigger class="col-span-2 bg-slate-800 border-slate-700 h-11">
+                <SelectTrigger class="col-span-2 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 h-11">
                   <SelectValue placeholder="Select a primary portfolio" />
                 </SelectTrigger>
-                <SelectContent class="bg-slate-800 border-slate-700 text-slate-200">
+                <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200">
                   <SelectGroup>
                     <SelectItem value="all">None (Show All by Default)</SelectItem>
                     <SelectItem v-for="p in portfoliosList" :key="p.id" :value="p.id">{{ p.name }}</SelectItem>
@@ -207,24 +211,24 @@ onMounted(() => {
               </Select>
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end bg-slate-800/30 border-t border-slate-700/60 py-4 px-6 rounded-b-xl">
+          <CardFooter class="flex justify-end bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700/60 py-4 px-6 rounded-b-xl">
             <Button @click="saveSettings" :disabled="isSaving" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">
               {{ isSaving ? 'Saving...' : 'Save Preferences' }}
             </Button>
           </CardFooter>
         </Card>
 
-        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
+        <Card class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle class="text-white">Data Management</CardTitle>
-            <CardDescription class="text-slate-400">Export your data or manage your account.</CardDescription>
+            <CardTitle class="text-slate-900 dark:text-white">Data Management</CardTitle>
+            <CardDescription class="text-slate-500 dark:text-slate-400">Export your data or manage your account.</CardDescription>
           </CardHeader>
           <CardContent class="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
-              <h4 class="font-semibold text-slate-200">Export All Transactions</h4>
-              <p class="text-sm text-slate-400">Download a CSV file of your complete transaction history.</p>
+              <h4 class="font-semibold text-slate-800 dark:text-slate-200">Export All Transactions</h4>
+              <p class="text-sm text-slate-500 dark:text-slate-400">Download a CSV file of your complete transaction history.</p>
             </div>
-            <Button variant="outline" @click="exportTransactions" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
+            <Button variant="outline" @click="exportTransactions" class="border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white">
               <Download class="h-4 w-4 mr-2" />
               Export Data
             </Button>

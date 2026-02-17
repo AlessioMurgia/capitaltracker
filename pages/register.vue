@@ -31,8 +31,9 @@
                   placeholder="you@example.com"
                   required
                   :disabled="isLoadingEmail"
-                  class="bg-slate-700 border-slate-600 text-white h-11"
+                  :class="['bg-slate-700 border-slate-600 text-white h-11 transition-colors', { 'border-red-500 focus-visible:ring-red-500': emailError }]"
               />
+              <p v-if="emailError" class="text-sm text-red-400 mt-1">{{ emailError }}</p>
             </div>
             <div class="grid gap-2">
               <Label for="password" class="text-slate-400">Password</Label>
@@ -40,11 +41,13 @@
                   id="password"
                   v-model="password"
                   type="password"
-                  placeholder="•••••••• (min. 6 characters)"
+                  placeholder="•••••••• (min. 8 characters)"
                   required
                   :disabled="isLoadingEmail"
-                  class="bg-slate-700 border-slate-600 text-white h-11"
+                  :class="['bg-slate-700 border-slate-600 text-white h-11 transition-colors', { 'border-red-500 focus-visible:ring-red-500': passwordError }]"
               />
+              <p v-if="passwordError" class="text-sm text-red-400 mt-1">{{ passwordError }}</p>
+
             </div>
             <div class="grid gap-2">
               <Label for="confirm-password" class="text-slate-400">Confirm Password</Label>
@@ -55,8 +58,18 @@
                   placeholder="••••••••"
                   required
                   :disabled="isLoadingEmail"
-                  class="bg-slate-700 border-slate-600 text-white h-11"
+                  :class="['bg-slate-700 border-slate-600 text-white h-11 transition-colors', { 'border-red-500 focus-visible:ring-red-500': confirmPasswordError }]"
               />
+              <p v-if="confirmPasswordError" class="text-sm text-red-400 mt-1">{{ confirmPasswordError }}</p>
+              <div class="text-xs text-slate-500 space-y-1 px-1">
+                <p>Password must contain at least one of each:</p>
+                <ul class="list-disc list-inside">
+                  <li>Lowercase letter (a-z)</li>
+                  <li>Uppercase letter (A-Z)</li>
+                  <li>Number (0-9)</li>
+                  <li>Special character (!@#, etc.)</li>
+                </ul>
+              </div>
             </div>
 
             <Button type="submit" class="w-full mt-2 h-11 bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold" :disabled="isLoadingEmail">
@@ -116,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -141,24 +154,72 @@ const isLoadingSocial = ref({
   google: false,
 });
 
+// MODIFIED: One for server errors, others for dynamic field validation
 const errorMessage = ref<string | null>(null);
 const registrationMessage = ref<string | null>(null);
+const emailError = ref<string | null>(null);
+const passwordError = ref<string | null>(null);
+const confirmPasswordError = ref<string | null>(null);
+
+
+// --- Regex for validation ---
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]).{8,}$/;
+
+// --- Validation Functions ---
+const validateEmail = () => {
+  if (!email.value) {
+    emailError.value = 'Email is required.';
+  } else if (!emailRegex.test(email.value)) {
+    emailError.value = 'Please enter a valid email address.';
+  } else {
+    emailError.value = null;
+  }
+};
+
+const validatePassword = () => {
+  if (!password.value) {
+    passwordError.value = 'Password is required.';
+  } else if (!passwordRegex.test(password.value)) {
+    passwordError.value = 'Password does not meet the requirements.';
+  } else {
+    passwordError.value = null;
+  }
+  if (confirmPassword.value) {
+    validateConfirmPassword();
+  }
+};
+
+const validateConfirmPassword = () => {
+  if (!confirmPassword.value) {
+    confirmPasswordError.value = 'Please confirm your password.';
+  } else if (password.value !== confirmPassword.value) {
+    confirmPasswordError.value = 'Passwords do not match.';
+  } else {
+    confirmPasswordError.value = null;
+  }
+};
+
+// --- Watchers for dynamic validation ---
+watch(email, validateEmail);
+watch(password, validatePassword);
+watch(confirmPassword, validateConfirmPassword);
+
 
 async function handleEmailRegister() {
-  if (password.value !== confirmPassword.value) {
-    errorMessage.value = 'Passwords do not match.';
-    registrationMessage.value = null;
-    return;
-  }
-  if (!email.value || password.value.length < 6) {
-    errorMessage.value = 'Please enter a valid email and a password of at least 6 characters.';
-    registrationMessage.value = null;
-    return;
+  errorMessage.value = null;
+  registrationMessage.value = null;
+
+  // --- Final validation check on submit ---
+  validateEmail();
+  validatePassword();
+  validateConfirmPassword();
+
+  if (emailError.value || passwordError.value || confirmPasswordError.value) {
+    return; // Stop submission if there are validation errors
   }
 
   isLoadingEmail.value = true;
-  errorMessage.value = null;
-  registrationMessage.value = null;
 
   try {
     const { data, error } = await supabase.auth.signUp({
@@ -213,3 +274,4 @@ async function handleSocialRegister(provider: 'google') {
   }
 }
 </script>
+

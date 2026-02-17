@@ -3,7 +3,7 @@ import Sidebar from '~/components/Sidebar/index.vue';
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-900">
+  <div class="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200">
     <Sidebar />
 
     <main class="lg:pl-[250px]">
@@ -16,4 +16,3 @@ import Sidebar from '~/components/Sidebar/index.vue';
 <style>
 /* You can add global styles here if needed */
 </style>
-

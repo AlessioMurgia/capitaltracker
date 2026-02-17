@@ -16,8 +16,14 @@ export default defineNuxtConfig({
     'shadcn-nuxt',
     '@nuxt/icon',
     'nuxt-charts',
-    '@nuxtjs/supabase'
+    '@nuxtjs/supabase',
+    '@nuxtjs/color-mode'
   ],
+
+  colorMode: {
+    classSuffix: ''
+  },
+
   shadcn: {
     /**
      * Prefix for all the imported component

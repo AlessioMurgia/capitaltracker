@@ -524,69 +524,69 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="bg-slate-900 text-slate-200 font-sans w-full min-h-screen">
-    <Toaster richColors position="top-right" theme="dark" />
+  <div class="font-sans w-full">
+    <Toaster richColors position="top-right" :theme="$colorMode.value === 'dark' ? 'dark' : 'light'" />
     <div class="max-w-4xl mx-auto p-4 md:p-6 lg:p-8">
 
       <header class="mb-8">
-        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">Reports & Exports</h1>
-        <p class="text-slate-400 mt-1">Generate downloadable reports of your financial data.</p>
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">Reports & Exports</h1>
+        <p class="text-slate-500 dark:text-slate-400 mt-1">Generate downloadable reports of your financial data.</p>
       </header>
 
       <div v-if="isLoading" class="animate-pulse space-y-8">
-        <div class="h-48 bg-slate-800/50 rounded-xl"></div>
-        <div class="h-48 bg-slate-800/50 rounded-xl"></div>
+        <div class="h-48 bg-slate-100 dark:bg-slate-800/50 rounded-xl"></div>
+        <div class="h-48 bg-slate-100 dark:bg-slate-800/50 rounded-xl"></div>
       </div>
 
       <div v-else class="grid grid-cols-1 gap-8">
-        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
+        <Card class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle class="text-white">Transaction Export</CardTitle>
-            <CardDescription class="text-slate-400">Download your complete transaction history for the selected portfolio(s).</CardDescription>
+            <CardTitle class="text-slate-900 dark:text-white">Transaction Export</CardTitle>
+            <CardDescription class="text-slate-500 dark:text-slate-400">Download your complete transaction history for the selected portfolio(s).</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid w-full max-w-sm items-center gap-2">
-              <label for="portfolio-select-csv" class="text-sm font-medium text-slate-400">Portfolio</label>
+              <label for="portfolio-select-csv" class="text-sm font-medium text-slate-500 dark:text-slate-400">Portfolio</label>
               <Select v-model="selectedPortfolioIdCsv">
-                <SelectTrigger id="portfolio-select-csv" class="bg-slate-800 border-slate-700 h-11"><SelectValue placeholder="All Portfolios" /></SelectTrigger>
-                <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
+                <SelectTrigger id="portfolio-select-csv" class="bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 h-11"><SelectValue placeholder="All Portfolios" /></SelectTrigger>
+                <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup>
                   <SelectItem value="all">All Portfolios</SelectItem>
                   <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">{{ portfolio.name }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end gap-4 bg-slate-800/30 border-t border-slate-700/60 py-4 px-6 rounded-b-xl">
-            <Button variant="outline" @click="exportTransactionsCsv" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
+          <CardFooter class="flex justify-end gap-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700/60 py-4 px-6 rounded-b-xl">
+            <Button variant="outline" @click="exportTransactionsCsv" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading" class="border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white">
               <FileSpreadsheet class="h-4 w-4 mr-2" />
               {{ isGeneratingCsv ? 'Exporting...' : 'Export CSV' }}
             </Button>
-            <Button variant="outline" @click="exportTransactionsPdf" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading" class="border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white">
+            <Button variant="outline" @click="exportTransactionsPdf" :disabled="isGeneratingCsv || isGeneratingPdf || isPreparing || isDownloading" class="border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white">
               <FileText class="h-4 w-4 mr-2" />
               {{ isGeneratingPdf ? 'Exporting...' : 'Export PDF' }}
             </Button>
           </CardFooter>
         </Card>
 
-        <Card class="bg-slate-800/50 border border-slate-700/60 rounded-xl">
+        <Card class="bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl">
           <CardHeader>
-            <CardTitle class="text-white">Portfolio Summary Report</CardTitle>
-            <CardDescription class="text-slate-400">Generate a comprehensive PDF summary of your portfolio's current state and historical performance.</CardDescription>
+            <CardTitle class="text-slate-900 dark:text-white">Portfolio Summary Report</CardTitle>
+            <CardDescription class="text-slate-500 dark:text-slate-400">Generate a comprehensive PDF summary of your portfolio's current state and historical performance.</CardDescription>
           </CardHeader>
           <CardContent>
             <div class="grid w-full max-w-sm items-center gap-2">
-              <label for="portfolio-select-pdf" class="text-sm font-medium text-slate-400">Portfolio</label>
+              <label for="portfolio-select-pdf" class="text-sm font-medium text-slate-500 dark:text-slate-400">Portfolio</label>
               <Select v-model="selectedPortfolioIdPdf">
-                <SelectTrigger id="portfolio-select-pdf" class="bg-slate-800 border-slate-700 h-11"><SelectValue placeholder="All Portfolios" /></SelectTrigger>
-                <SelectContent class="bg-slate-800 border-slate-700 text-slate-200"><SelectGroup>
+                <SelectTrigger id="portfolio-select-pdf" class="bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700 h-11"><SelectValue placeholder="All Portfolios" /></SelectTrigger>
+                <SelectContent class="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-200"><SelectGroup>
                   <SelectItem value="all">All Portfolios</SelectItem>
                   <SelectItem v-for="portfolio in portfoliosList" :key="portfolio.id" :value="portfolio.id">{{ portfolio.name }}</SelectItem>
                 </SelectGroup></SelectContent>
               </Select>
             </div>
           </CardContent>
-          <CardFooter class="flex justify-end gap-4 bg-slate-800/30 border-t border-slate-700/60 py-4 px-6 rounded-b-xl">
-            <Button @click="preparePdfReport" :disabled="isPreparing || isDownloading" class="bg-slate-700 hover:bg-slate-600 text-white font-semibold">
+          <CardFooter class="flex justify-end gap-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700/60 py-4 px-6 rounded-b-xl">
+            <Button @click="preparePdfReport" :disabled="isPreparing || isDownloading" class="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white font-semibold">
               {{ isPreparing ? 'Preparing...' : 'Prepare Report' }}
             </Button>
             <Button @click="downloadPdf" :disabled="!isPdfReady || isDownloading" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold disabled:from-slate-500 disabled:to-slate-600">
