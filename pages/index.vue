@@ -48,7 +48,7 @@
                 <Button size="lg" class="w-full sm:w-auto bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold shadow-lg hover:shadow-green-500/30 transition-shadow transform hover:scale-105">Get Your Free Account</Button>
               </NuxtLink>
               <NuxtLink to="/#features">
-                <Button size="lg" variant="outline" class="w-full sm:w-auto border-slate-700 hover:bg-slate-800 hover:border-slate-600">Explore Features</Button>
+                <Button size="lg" variant="outline" class="w-full sm:w-auto border-green-500 text-green-400 hover:bg-green-500/10 hover:text-green-300">Explore Features</Button>
               </NuxtLink>
             </div>
           </div>
@@ -58,20 +58,6 @@
         </div>
       </section>
 
-      <!-- Trusted By Section -->
-      <section class="py-12 bg-slate-900 border-y border-slate-800">
-        <div class="container mx-auto px-4 md:px-6 max-w-screen-xl">
-          <h3 class="text-center text-sm font-semibold text-slate-500 tracking-wider">TRUSTED BY INVESTORS AT LEADING FIRMS</h3>
-          <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-8 items-center">
-            <img src="https://placehold.co/150x50/334155/94A3B8?text=VentureCo&font=inter" alt="VentureCo Logo" class="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity">
-            <img src="https://placehold.co/150x50/334155/94A3B8?text=Quantum+Capital&font=inter" alt="Quantum Capital Logo" class="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity">
-            <img src="https://placehold.co/150x50/334155/94A3B8?text=Innovate+LP&font=inter" alt="Innovate LP Logo" class="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity">
-            <img src="https://placehold.co/150x50/334155/94A3B8?text=Apex+Holdings&font=inter" alt="Apex Holdings Logo" class="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity">
-            <img src="https://placehold.co/150x50/334155/94A3B8?text=Momentum+VC&font=inter" alt="Momentum VC Logo" class="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity">
-            <img src="https://placehold.co/150x50/334155/94A3B8?text=Synergy+Funds&font=inter" alt="Synergy Funds Logo" class="h-8 mx-auto opacity-60 hover:opacity-100 transition-opacity">
-          </div>
-        </div>
-      </section>
 
 
       <!-- Features Section -->
@@ -83,38 +69,60 @@
               AssetsFlow is built to handle the complexity of modern portfolios, giving you the clarity you need to optimize your strategy and reach your financial goals.
             </p>
           </div>
-          <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+          <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             <Card class="bg-slate-800/50 border-slate-700/60 hover:border-green-500/50 hover:bg-slate-800 transition-all duration-300 transform hover:-translate-y-1">
-              <CardHeader class="items-center text-center">
-                <div class="p-3 rounded-full bg-gradient-to-br from-green-500/10 to-blue-500/10 mb-4 inline-block border border-slate-700">
-                  <DollarSign class="h-8 w-8 text-green-400" />
+              <CardHeader>
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="p-2.5 rounded-full bg-gradient-to-br from-green-500/10 to-blue-500/10 border border-slate-700 flex-shrink-0">
+                    <DollarSign class="h-6 w-6 text-green-400" />
+                  </div>
+                  <CardTitle class="text-xl text-white">Track Everything in One Place</CardTitle>
                 </div>
-                <CardTitle class="text-xl text-white">Track Everything in One Place</CardTitle>
               </CardHeader>
-              <CardContent class="text-center">
+              <CardContent>
                 <p class="text-sm text-slate-400">From public equities and crypto to private deals, real estate, and collectibles. If you can own it, you can track it on AssetsFlow.</p>
               </CardContent>
             </Card>
             <Card class="bg-slate-800/50 border-slate-700/60 hover:border-green-500/50 hover:bg-slate-800 transition-all duration-300 transform hover:-translate-y-1">
-              <CardHeader class="items-center text-center">
-                <div class="p-3 rounded-full bg-gradient-to-br from-green-500/10 to-blue-500/10 mb-4 inline-block border border-slate-700">
-                  <TrendingUp class="h-8 w-8 text-green-400" />
+              <CardHeader>
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="p-2.5 rounded-full bg-gradient-to-br from-green-500/10 to-blue-500/10 border border-slate-700 flex-shrink-0">
+                    <TrendingUp class="h-6 w-6 text-green-400" />
+                  </div>
+                  <CardTitle class="text-xl text-white">True Performance Analytics</CardTitle>
                 </div>
-                <CardTitle class="text-xl text-white">True Performance Analytics</CardTitle>
               </CardHeader>
-              <CardContent class="text-center">
+              <CardContent>
                 <p class="text-sm text-slate-400">Understand your real returns. Our powerful engine calculates time-weighted returns and IRR for all your assets, even illiquid ones.</p>
               </CardContent>
             </Card>
             <Card class="bg-slate-800/50 border-slate-700/60 hover:border-green-500/50 hover:bg-slate-800 transition-all duration-300 transform hover:-translate-y-1">
-              <CardHeader class="items-center text-center">
-                <div class="p-3 rounded-full bg-gradient-to-br from-green-500/10 to-blue-500/10 mb-4 inline-block border border-slate-700">
-                  <PieChart class="h-8 w-8 text-green-400" />
+              <CardHeader>
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="p-2.5 rounded-full bg-gradient-to-br from-green-500/10 to-blue-500/10 border border-slate-700 flex-shrink-0">
+                    <PieChart class="h-6 w-6 text-green-400" />
+                  </div>
+                  <CardTitle class="text-xl text-white">Net Worth Analysis</CardTitle>
                 </div>
-                <CardTitle class="text-xl text-white">Net Worth Analysis</CardTitle>
               </CardHeader>
-              <CardContent class="text-center">
+              <CardContent>
                 <p class="text-sm text-slate-400">Visualize your asset allocation, see your net worth grow over time, and identify diversification opportunities with our intuitive charts.</p>
+              </CardContent>
+            </Card>
+            <Card class="relative bg-slate-800/50 border-slate-700/60 hover:border-blue-500/50 hover:bg-slate-800 transition-all duration-300 transform hover:-translate-y-1 overflow-hidden">
+              <div class="absolute top-4 -right-8 z-10 rotate-45 bg-blue-500 px-8 py-1.5 shadow-lg">
+                <span class="text-[10px] font-bold text-white uppercase tracking-wide">Coming Soon</span>
+              </div>
+              <CardHeader>
+                <div class="flex items-center gap-3 mb-2">
+                  <div class="p-2.5 rounded-full bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-slate-700 flex-shrink-0">
+                    <Sparkles class="h-6 w-6 text-blue-400" />
+                  </div>
+                  <CardTitle class="text-xl text-white">Get AI Insights</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p class="text-sm text-slate-400">Leverage AI-powered analysis to get personalized insights, portfolio recommendations, and smart predictions for your investments.</p>
               </CardContent>
             </Card>
           </div>
@@ -162,7 +170,7 @@
             </p>
           </div>
           <div class="grid gap-8 md:grid-cols-2 max-w-4xl mx-auto">
-            <Card class="flex flex-col bg-slate-800/50 border border-slate-700 transform hover:scale-105 transition-transform duration-300">
+            <Card class="border-green-500 flex flex-col ring-2 ring-green-500 bg-slate-800 shadow-2xl shadow-green-500/20 transform hover:scale-105 transition-transform duration-300">
               <CardHeader>
                 <CardTitle class="text-2xl text-white">Hobbyist</CardTitle>
                 <CardDescription class="text-slate-400">Perfect for getting started and tracking your core investments.</CardDescription>
@@ -170,36 +178,37 @@
               <CardContent class="flex-1">
                 <p class="text-4xl font-bold text-white mb-4">$0<span class="text-lg font-normal text-slate-400">/month</span></p>
                 <ul class="space-y-3 text-sm text-slate-300">
+                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Up to 2 portfolios</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Track up to 20 assets</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Core Dashboard & Charts</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Manual Asset Entry</li>
-                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Community Support</li>
                 </ul>
               </CardContent>
               <CardFooter>
-                <NuxtLink to="/register" class="w-full"><Button class="w-full bg-slate-700 text-white hover:bg-slate-600">Start for Free</Button></NuxtLink>
+                <NuxtLink to="/register" class="w-full"><Button class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Start for Free</Button></NuxtLink>
               </CardFooter>
             </Card>
-            <Card class="border-green-500 flex flex-col ring-2 ring-green-500 bg-slate-800 shadow-2xl shadow-green-500/20 transform hover:scale-105 transition-transform duration-300">
+            <Card class="flex flex-col bg-slate-800/50 border border-slate-700 relative overflow-hidden">
+              <div class="absolute top-6 -right-10 z-10 rotate-45 bg-blue-500 px-12 py-2 shadow-lg">
+                <span class="text-xs font-bold text-white uppercase tracking-wide">Coming Soon</span>
+              </div>
               <CardHeader>
-                <div class="flex justify-between items-center">
-                  <CardTitle class="text-2xl text-white">Pro Investor</CardTitle>
-                  <span class="inline-block rounded-full bg-green-500 px-3 py-1 text-xs font-semibold text-white">Most Popular</span>
-                </div>
+                <CardTitle class="text-2xl text-white">Pro Investor</CardTitle>
                 <CardDescription class="text-slate-400">For serious investors who demand unlimited tracking and advanced analytics.</CardDescription>
               </CardHeader>
               <CardContent class="flex-1">
                 <p class="text-4xl font-bold text-white mb-4">$9<span class="text-lg font-normal text-slate-400">/month</span></p>
                 <ul class="space-y-3 text-sm text-slate-300">
-                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Unlimited asset tracking</li>
-                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Advanced Analytics & Projections</li>
-                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Full Suite of Allocation Charts</li>
+                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Unlimited portfolios</li>
+                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Unlimited assets</li>
+                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> AI Insights & Recommendations</li>
+                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Reports generation</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Automated Dividend Tracking</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Priority Email Support</li>
                 </ul>
               </CardContent>
               <CardFooter>
-                <NuxtLink to="/register?plan=pro" class="w-full"><Button class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Go Pro</Button></NuxtLink>
+                <Button class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold opacity-50 cursor-not-allowed" disabled>Go Pro</Button>
               </CardFooter>
             </Card>
           </div>
@@ -263,9 +272,8 @@
               </ul>
             </div>
             <div>
-              <h4 class="font-semibold text-sm text-slate-200 mb-3">Company</h4>
+              <h4 class="font-semibold text-sm text-slate-200 mb-3">About Us</h4>
               <ul class="space-y-2 text-sm">
-                <li><NuxtLink to="/about" class="text-slate-400 hover:text-green-400">About Us</NuxtLink></li>
                 <li><NuxtLink to="/contact" class="text-slate-400 hover:text-green-400">Contact</NuxtLink></li>
               </ul>
             </div>
@@ -291,7 +299,7 @@
 </template>
 
 <script setup lang="ts">
-import { DollarSign, TrendingUp, PieChart, Check, Twitter, Linkedin } from 'lucide-vue-next';
+import { DollarSign, TrendingUp, PieChart, Check, Twitter, Linkedin, Sparkles } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'

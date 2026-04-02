@@ -71,6 +71,10 @@ const reinvestProceeds = ref(false);
 const destinationPortfolioId = ref<string | null>(null);
 const destinationAssetId = ref<string | null>(null);
 
+// --- State for Input Mode (quantity vs total amount) ---
+const inputMode = ref<'quantity' | 'amount'>('quantity');
+const totalAmount = ref<number>(0);
+
 // --- Computed Properties ---
 const filteredAndSortedTransactions = computed(() => {
   let transactions = [...allTransactions.value];
@@ -94,6 +98,37 @@ const filteredAndSortedTransactions = computed(() => {
     return sortAscending.value ? dateA - dateB : dateB - dateA;
   });
   return transactions;
+});
+
+// Computed property to sync quantity and total amount based on input mode
+const calculatedQuantity = computed({
+  get: () => {
+    if (inputMode.value === 'amount' && transactionToEdit.value.price_per_unit && totalAmount.value) {
+      return Number((totalAmount.value / transactionToEdit.value.price_per_unit).toFixed(8));
+    }
+    return transactionToEdit.value.quantity || 0;
+  },
+  set: (val) => {
+    transactionToEdit.value.quantity = val;
+    if (inputMode.value === 'quantity' && transactionToEdit.value.price_per_unit) {
+      totalAmount.value = Number((val * transactionToEdit.value.price_per_unit).toFixed(2));
+    }
+  }
+});
+
+const calculatedTotalAmount = computed({
+  get: () => {
+    if (inputMode.value === 'quantity' && transactionToEdit.value.quantity && transactionToEdit.value.price_per_unit) {
+      return Number((transactionToEdit.value.quantity * transactionToEdit.value.price_per_unit).toFixed(2));
+    }
+    return totalAmount.value || 0;
+  },
+  set: (val) => {
+    totalAmount.value = val;
+    if (inputMode.value === 'amount' && transactionToEdit.value.price_per_unit) {
+      transactionToEdit.value.quantity = Number((val / transactionToEdit.value.price_per_unit).toFixed(8));
+    }
+  }
 });
 
 // --- Data Fetching ---
@@ -156,6 +191,8 @@ function resetDialogState() {
   reinvestProceeds.value = false;
   destinationPortfolioId.value = null;
   destinationAssetId.value = null;
+  inputMode.value = 'quantity';
+  totalAmount.value = 0;
 }
 
 async function openCreateDialog() {
@@ -291,6 +328,17 @@ watch(() => [transactionToEdit.value.asset_id, transactionToEdit.value.type], as
     if (data && transactionToEdit.value) {
       transactionToEdit.value.price_per_unit = data.value;
       toast.info("Latest price has been filled automatically.");
+    }
+  }
+});
+
+// Watch for price changes to recalculate quantity or amount
+watch(() => transactionToEdit.value.price_per_unit, (newPrice) => {
+  if (newPrice && newPrice > 0) {
+    if (inputMode.value === 'quantity' && transactionToEdit.value.quantity) {
+      totalAmount.value = Number((transactionToEdit.value.quantity * newPrice).toFixed(2));
+    } else if (inputMode.value === 'amount' && totalAmount.value) {
+      transactionToEdit.value.quantity = Number((totalAmount.value / newPrice).toFixed(8));
     }
   }
 });
@@ -458,9 +506,51 @@ watch(() => [transactionToEdit.value.asset_id, transactionToEdit.value.type], as
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-              <div class="space-y-2"><Label for="quantity" class="text-slate-600 dark:text-slate-400">Quantity</Label><Input id="quantity" type="number" v-model="transactionToEdit.quantity" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"/></div>
-              <div class="space-y-2"><Label for="price" class="text-slate-600 dark:text-slate-400">Price / Unit</Label><Input id="price" type="number" v-model="transactionToEdit.price_per_unit" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"/></div>
+            <div class="space-y-2">
+              <Label class="text-slate-600 dark:text-slate-400">Input Mode</Label>
+              <div class="flex gap-2">
+                <Button
+                  type="button"
+                  :variant="inputMode === 'quantity' ? 'default' : 'outline'"
+                  @click="inputMode = 'quantity'"
+                  class="flex-1"
+                  :class="inputMode === 'quantity' ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'"
+                >
+                  By Quantity
+                </Button>
+                <Button
+                  type="button"
+                  :variant="inputMode === 'amount' ? 'default' : 'outline'"
+                  @click="inputMode = 'amount'"
+                  class="flex-1"
+                  :class="inputMode === 'amount' ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white' : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300'"
+                >
+                  By Total Amount
+                </Button>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <Label for="price" class="text-slate-600 dark:text-slate-400">
+                {{ inputMode === 'amount' ? 'Weighted Average Price (€)' : 'Price per Unit (€)' }}
+              </Label>
+              <Input id="price" type="number" step="0.01" v-model="transactionToEdit.price_per_unit" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"/>
+            </div>
+
+            <div v-if="inputMode === 'quantity'" class="space-y-2">
+              <Label for="quantity" class="text-slate-600 dark:text-slate-400">Quantity</Label>
+              <Input id="quantity" type="number" step="0.00000001" v-model="calculatedQuantity" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"/>
+              <p v-if="transactionToEdit.price_per_unit && calculatedQuantity" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Total: €{{ calculatedTotalAmount.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}
+              </p>
+            </div>
+
+            <div v-else class="space-y-2">
+              <Label for="total-amount" class="text-slate-600 dark:text-slate-400">Total Amount (€)</Label>
+              <Input id="total-amount" type="number" step="0.01" v-model="calculatedTotalAmount" class="bg-slate-50 dark:bg-slate-700 border-slate-300 dark:border-slate-600"/>
+              <p v-if="transactionToEdit.price_per_unit && calculatedTotalAmount" class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Quantity: {{ calculatedQuantity.toLocaleString('it-IT', {minimumFractionDigits: 2, maximumFractionDigits: 8}) }}
+              </p>
             </div>
 
             <div class="space-y-2">
