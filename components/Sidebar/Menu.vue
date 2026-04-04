@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import {
   LayoutDashboard,
   Wallet,
@@ -11,7 +11,8 @@ import {
   User,
   Settings,
   LogOut,
-  UserCircle
+  UserCircle,
+  ShieldCheck
 } from 'lucide-vue-next';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,29 @@ import { Button } from '@/components/ui/button';
 const user = useSupabaseUser();
 const supabase = useSupabaseClient();
 const router = useRouter();
+
+// isAdmin uses a plain ref instead of computed(() => user.value?.app_metadata?.role)
+// because useSupabaseUser() may lose app_metadata during background auth state refreshes.
+// getUser() makes a live API call and always returns the latest app_metadata from the DB.
+const isAdmin = ref(false);
+
+async function refreshAdminStatus() {
+  const { data: { user: freshUser } } = await supabase.auth.getUser();
+  isAdmin.value = freshUser?.app_metadata?.role === 'admin';
+}
+
+onMounted(() => {
+  if (user.value) refreshAdminStatus();
+});
+
+// Re-check whenever the auth user changes (sign-in / sign-out)
+watch(user, (newUser) => {
+  if (newUser) {
+    refreshAdminStatus();
+  } else {
+    isAdmin.value = false;
+  }
+});
 
 const mainNavItems = ref([
   { title: "Overview", path: "/dashboard", icon: LayoutDashboard },
@@ -66,6 +90,23 @@ async function handleSignOut() {
           <span>{{ item.title }}</span>
         </NuxtLink>
       </nav>
+
+      <!-- Admin section – only visible to admins -->
+      <template v-if="isAdmin">
+        <div class="mt-4 mb-1 px-3">
+          <p class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Admin</p>
+        </div>
+        <nav class="grid gap-1">
+          <NuxtLink
+              to="/admin"
+              class="flex items-center gap-3 rounded-md px-3 py-2 text-amber-600 dark:text-amber-400 transition-all hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-700 dark:hover:text-amber-300"
+              active-class="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-semibold"
+          >
+            <ShieldCheck class="h-5 w-5" />
+            <span>Admin Dashboard</span>
+          </NuxtLink>
+        </nav>
+      </template>
     </div>
 
     <div class="p-4 border-t border-slate-200 dark:border-slate-800 flex-shrink-0">

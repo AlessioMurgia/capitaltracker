@@ -8,8 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Toaster, toast } from 'vue-sonner';
 import 'vue-sonner/style.css'
-import { Pencil, Trash2, FolderPlus } from 'lucide-vue-next';
+import { Pencil, Trash2, FolderPlus, Lock } from 'lucide-vue-next';
 import type { Database } from '~/types/supabase';
+
+// --- Plan / Role ---
+const { isFreeUser, FREE_LIMITS, fetchRole } = useUserRole();
+const isAtPortfolioLimit = computed(() => isFreeUser.value && portfolios.value.length >= FREE_LIMITS.portfolios);
 
 type Portfolio = Database['public']['Tables']['portfolios']['Row'];
 type Transaction = Database['public']['Tables']['transactions']['Row'] & { assets: Asset };
@@ -158,6 +162,10 @@ function calculatePortfolioValues(transactions: (Database['public']['Tables']['t
 
 // --- CRUD Handlers ---
 function openCreateDialog() {
+  if (isAtPortfolioLimit.value) {
+    toast.error(`Free plan allows up to ${FREE_LIMITS.portfolios} portfolios. Upgrade to Pro to create more.`);
+    return;
+  }
   portfolioToEdit.value = { name: '', description: '' };
   isDialogOpen.value = true;
 }
@@ -170,6 +178,12 @@ function openEditDialog(portfolio: Portfolio) {
 async function savePortfolio() {
   if (!user.value || !portfolioToEdit.value || !portfolioToEdit.value.name) {
     toast.error("Portfolio name is required.");
+    return;
+  }
+
+  // Double-check limit server-side guard (in case user bypassed the button)
+  if (!portfolioToEdit.value.id && isAtPortfolioLimit.value) {
+    toast.error(`Free plan allows up to ${FREE_LIMITS.portfolios} portfolios. Upgrade to Pro.`);
     return;
   }
 
@@ -227,6 +241,7 @@ async function confirmDelete() {
 // --- Lifecycle and Watchers ---
 onMounted(() => {
   definePageMeta({ layout: 'default', middleware: ['auth'] });
+  fetchRole();
   watch(user, (currentUser) => {
     if (currentUser) {
       fetchData();
@@ -248,10 +263,19 @@ onMounted(() => {
           <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">My Portfolios</h1>
           <p class="text-slate-500 dark:text-slate-400 mt-1">Manage your investment portfolios. Values are shown in <strong>{{ userCurrency }}</strong>.</p>
         </div>
-        <Button @click="openCreateDialog" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold hover:from-green-600 hover:to-blue-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/20">
-          <FolderPlus class="h-5 w-5 mr-2" />
-          Create New Portfolio
-        </Button>
+        <div class="flex flex-col items-end gap-2">
+          <PlanLimitBadge v-if="isFreeUser" :current="portfolios.length" :max="FREE_LIMITS.portfolios" label="portfolios" />
+          <Button
+              @click="openCreateDialog"
+              :disabled="isAtPortfolioLimit"
+              :title="isAtPortfolioLimit ? `Free plan limit reached (${FREE_LIMITS.portfolios} portfolios). Upgrade to create more.` : 'Create a new portfolio'"
+              class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold hover:from-green-600 hover:to-blue-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+          >
+            <Lock v-if="isAtPortfolioLimit" class="h-4 w-4 mr-2" />
+            <FolderPlus v-else class="h-5 w-5 mr-2" />
+            {{ isAtPortfolioLimit ? 'Limit Reached' : 'Create New Portfolio' }}
+          </Button>
+        </div>
       </header>
 
       <div v-if="isLoading" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 animate-pulse">
@@ -267,7 +291,7 @@ onMounted(() => {
         <FolderPlus class="h-16 w-16 mx-auto text-slate-500 dark:text-slate-600 mb-4" />
         <h3 class="text-xl font-semibold text-slate-900 dark:text-white">No Portfolios Found</h3>
         <p class="text-slate-500 dark:text-slate-400 mt-2">Get started by creating your first investment portfolio.</p>
-        <Button @click="openCreateDialog" class="mt-6 bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold">Create Portfolio</Button>
+        <Button @click="openCreateDialog" :disabled="isAtPortfolioLimit" class="mt-6 bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed">Create Portfolio</Button>
       </div>
 
       <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

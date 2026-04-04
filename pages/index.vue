@@ -181,7 +181,7 @@
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Up to 2 portfolios</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Track up to 20 assets</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Core Dashboard & Charts</li>
-                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Manual Asset Entry</li>
+                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Automated Dividend Tracking</li>
                 </ul>
               </CardContent>
               <CardFooter>
@@ -203,8 +203,8 @@
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Unlimited assets</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> AI Insights & Recommendations</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Reports generation</li>
-                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Automated Dividend Tracking</li>
                   <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Priority Email Support</li>
+                  <li class="flex items-center"><Check class="h-5 w-5 text-green-500 mr-3 flex-shrink-0" /> Automated data entry</li>
                 </ul>
               </CardContent>
               <CardFooter>

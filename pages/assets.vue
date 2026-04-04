@@ -9,8 +9,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Toaster, toast } from 'vue-sonner';
-import { Pencil, Trash2, PlusCircle, Search, Loader2 } from 'lucide-vue-next';
+import { Pencil, Trash2, PlusCircle, Search, Loader2, Lock } from 'lucide-vue-next';
 import type { Database } from '~/types/supabase';
+
+// --- Plan / Role ---
+const { isFreeUser, FREE_LIMITS, fetchRole } = useUserRole();
+const isAtAssetLimit = computed(() => isFreeUser.value && allAssets.value.length >= FREE_LIMITS.assets);
 
 // --- Supabase & Data Loading ---
 const supabase = useSupabaseClient<Database>();
@@ -204,6 +208,10 @@ function onNameFocus() {
 
 // --- CRUD Handlers ---
 function openCreateDialog() {
+  if (isAtAssetLimit.value) {
+    toast.error(`Free plan allows up to ${FREE_LIMITS.assets} assets. Upgrade to Pro to track more.`);
+    return;
+  }
   equitySearchResults.value = [];
   showSearchResults.value = false;
   isInternalUpdate.value = false;
@@ -244,6 +252,12 @@ function openEditDialog(asset: Asset) {
 async function saveAsset() {
   if (!user.value || !assetToEdit.value || !assetToEdit.value.name || !assetToEdit.value.asset_class) {
     toast.error("Asset Name and Class are required.");
+    return;
+  }
+
+  // Guard against limit bypass (new asset only)
+  if (!assetToEdit.value.id && isAtAssetLimit.value) {
+    toast.error(`Free plan allows up to ${FREE_LIMITS.assets} assets. Upgrade to Pro.`);
     return;
   }
 
@@ -353,6 +367,7 @@ watch(() => assetToEdit.value.asset_class, (newVal) => {
 // --- Lifecycle and Watchers ---
 onMounted(() => {
   definePageMeta({ layout: 'default', middleware: ['auth'] });
+  fetchRole();
   watch(user, (currentUser) => {
     if (currentUser) {
       fetchData();
@@ -373,10 +388,19 @@ onMounted(() => {
           <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">My Assets</h1>
           <p class="text-slate-500 dark:text-slate-400 mt-1">Manage your personal list of trackable assets.</p>
         </div>
-        <Button @click="openCreateDialog" class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold hover:from-green-600 hover:to-blue-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/20">
-          <PlusCircle class="h-5 w-5 mr-2" />
-          Add New Asset
-        </Button>
+        <div class="flex flex-col items-end gap-2">
+          <PlanLimitBadge v-if="isFreeUser" :current="allAssets.length" :max="FREE_LIMITS.assets" label="assets" />
+          <Button
+              @click="openCreateDialog"
+              :disabled="isAtAssetLimit"
+              :title="isAtAssetLimit ? `Free plan limit reached (${FREE_LIMITS.assets} assets). Upgrade to track more.` : 'Add a new asset'"
+              class="bg-gradient-to-r from-green-500 to-blue-500 text-white font-semibold hover:from-green-600 hover:to-blue-600 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+          >
+            <Lock v-if="isAtAssetLimit" class="h-4 w-4 mr-2" />
+            <PlusCircle v-else class="h-5 w-5 mr-2" />
+            {{ isAtAssetLimit ? 'Limit Reached' : 'Add New Asset' }}
+          </Button>
+        </div>
       </header>
 
       <div class="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-xl p-4 mb-8">
